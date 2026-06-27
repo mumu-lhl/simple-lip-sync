@@ -8,8 +8,8 @@ permissions:
   contents: read
 
 jobs:
-  python:
-    name: Python checks
+  ruff:
+    name: Ruff
     runs-on: ubuntu-latest
 
     steps:
@@ -24,11 +24,40 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
 
-      - name: Ruff
+      - name: Run Ruff
         run: uv run --with ruff ruff check simple_lip_sync tests .github/scripts
 
-      - name: Python tests
+  tests:
+    name: Python tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Run unittest
         run: python -m unittest discover -s tests
 
-      - name: Bandit
+  bandit:
+    name: Bandit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Run Bandit
         run: uv run --with bandit bandit -r simple_lip_sync .github/scripts

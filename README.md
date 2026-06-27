@@ -1,5 +1,9 @@
 # Simple Lip Sync
 
+[![Ruff](https://img.shields.io/github/check-runs/mumu-lhl/simple-lip-sync/main?nameFilter=Ruff&label=ruff&logo=github)](https://github.com/mumu-lhl/simple-lip-sync/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/github/check-runs/mumu-lhl/simple-lip-sync/main?nameFilter=Python%20tests&label=tests&logo=github)](https://github.com/mumu-lhl/simple-lip-sync/actions/workflows/ci.yml)
+[![Bandit](https://img.shields.io/github/check-runs/mumu-lhl/simple-lip-sync/main?nameFilter=Bandit&label=bandit&logo=github)](https://github.com/mumu-lhl/simple-lip-sync/actions/workflows/ci.yml)
+
 Simple Lip Sync is a Blender add-on that extracts the lip sync feature from [hbr_mmd_tools](https://github.com/skys-mission/hbr_mmd_tools) into a focused add-on.
 
 It generates shape-key animation from an audio file or a Video Sequence Editor audio strip. The add-on includes the original MMD and VRM lip sync presets and supports user preset creation, import, and export.
