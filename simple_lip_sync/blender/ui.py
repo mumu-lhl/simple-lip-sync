@@ -407,15 +407,8 @@ class SIMPLE_LIP_SYNC_OT_open_config_folder(bpy.types.Operator):
         config_dir = get_config_manager().user_config_path
         os.makedirs(config_dir, exist_ok=True)
         try:
-            if os.name == "nt":
-                startfile = getattr(os, "startfile", None)
-                if not callable(startfile):
-                    raise OSError("os.startfile is unavailable")
-                startfile(config_dir)
-            else:
-                command = ["open", config_dir] if sys.platform == "darwin" else ["xdg-open", config_dir]
-                subprocess.run(command, check=True)
-        except (OSError, subprocess.SubprocessError) as exc:
+            _open_path_non_blocking(config_dir)
+        except OSError as exc:
             self.report({"ERROR"}, str(exc))
             return {"CANCELLED"}
 
@@ -501,6 +494,24 @@ def _tag_ui_redraw(context):
         return
     for area in screen.areas:
         area.tag_redraw()
+
+
+def _open_path_non_blocking(path):
+    if os.name == "nt":
+        startfile = getattr(os, "startfile", None)
+        if not callable(startfile):
+            raise OSError("os.startfile is unavailable")
+        startfile(path)
+        return
+
+    command = ["open", path] if sys.platform == "darwin" else ["xdg-open", path]
+    subprocess.Popen(
+        command,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
 
 
 CLASSES = (
