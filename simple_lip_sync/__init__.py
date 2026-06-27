@@ -13,13 +13,17 @@ bl_info = {
 
 def register():
     """Register the add-on."""
+    from .blender import i18n
     from .blender import ui
 
+    i18n.register()
     ui.register()
 
 
 def unregister():
     """Unregister the add-on."""
+    from .blender import i18n
     from .blender import ui
 
     ui.unregister()
+    i18n.unregister()

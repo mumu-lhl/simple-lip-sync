@@ -59,7 +59,20 @@ class ConfigManagerTests(unittest.TestCase):
             manager.export_config(entry["id"], export_path)
             self.assertTrue(os.path.exists(export_path))
 
+    def test_source_labels_can_be_translated(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            addon_dir = os.path.abspath("simple_lip_sync")
+            manager = ConfigManager(
+                addon_dir,
+                temp_dir,
+                translate_func=lambda text: {"Built-in": "内置", "User": "用户"}.get(text, text),
+            )
+
+            entries = manager.get_config_entries()
+            built_in = [entry for entry in entries if entry["type"] == "predefined"]
+            self.assertTrue(built_in)
+            self.assertIn("[内置]", built_in[0]["display_name"])
+
 
 if __name__ == "__main__":
     unittest.main()
-

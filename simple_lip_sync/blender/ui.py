@@ -7,6 +7,7 @@ import sys
 import bpy
 
 from ..core.profiles import DEFAULT_LIP_SYNC_PRESET, get_lip_sync_preset_values
+from .i18n import translate as _
 from .service import (
     find_timeline_audio_strip,
     generate_lip_sync,
@@ -63,12 +64,17 @@ class SIMPLE_LIP_SYNC_PT_main(bpy.types.Panel):
             layout.prop(scene, "sls_timeline_audio_strip")
             strip = find_timeline_audio_strip(scene)
             if strip is not None:
-                layout.label(text=f"Audio starts at frame {int(strip.frame_final_start)}", icon="INFO")
+                layout.label(
+                    text=_("Audio starts at frame {frame}").format(
+                        frame=int(strip.frame_final_start),
+                    ),
+                    icon="INFO",
+                )
 
         layout.prop(scene, "sls_start_frame")
         layout.prop(scene, "sls_generation_preset")
-        layout.prop(scene, "sls_config_selection", text="Preset")
-        layout.operator("simple_lip_sync.generate", text="Generate Lip Sync", icon="SOUND")
+        layout.prop(scene, "sls_config_selection", text=_("Preset"))
+        layout.operator("simple_lip_sync.generate", text=_("Generate Lip Sync"), icon="SOUND")
 
 
 class SIMPLE_LIP_SYNC_PT_tuning(bpy.types.Panel):
@@ -88,7 +94,7 @@ class SIMPLE_LIP_SYNC_PT_tuning(bpy.types.Panel):
 
         layout.prop(scene, "sls_use_custom_tuning")
         if not scene.sls_use_custom_tuning:
-            layout.label(text="Using generation preset", icon="INFO")
+            layout.label(text=_("Using generation preset"), icon="INFO")
             return
 
         layout.prop(scene, "sls_db_threshold")
@@ -114,12 +120,12 @@ class SIMPLE_LIP_SYNC_PT_presets(bpy.types.Panel):
         layout = self.layout
         scene = context.scene
 
-        layout.prop(scene, "sls_config_selection", text="Preset")
+        layout.prop(scene, "sls_config_selection", text=_("Preset"))
 
         row = layout.row(align=True)
-        row.operator("simple_lip_sync.autofill_mmd", text="MMD", icon="PRESET")
-        row.operator("simple_lip_sync.autofill_vrm", text="VRM", icon="PRESET")
-        row.operator("simple_lip_sync.autofill_selected", text="Selected", icon="EYEDROPPER")
+        row.operator("simple_lip_sync.autofill_mmd", text=_("MMD"), icon="PRESET")
+        row.operator("simple_lip_sync.autofill_vrm", text=_("VRM"), icon="PRESET")
+        row.operator("simple_lip_sync.autofill_selected", text=_("Selected"), icon="EYEDROPPER")
 
         grid = layout.grid_flow(columns=2, align=True)
         grid.prop(scene, "sls_shape_key_a", text="A")
@@ -129,16 +135,20 @@ class SIMPLE_LIP_SYNC_PT_presets(bpy.types.Panel):
         grid.prop(scene, "sls_shape_key_o", text="O")
         grid.prop(scene, "sls_shape_key_n", text="N")
 
-        layout.prop(scene, "sls_create_config_name", text="Name")
-        layout.prop(scene, "sls_create_config_file", text="File")
-        layout.operator("simple_lip_sync.create_preset", text="Create Preset", icon="ADD")
+        layout.prop(scene, "sls_create_config_name", text=_("Name"))
+        layout.prop(scene, "sls_create_config_file", text=_("File"))
+        layout.operator("simple_lip_sync.create_preset", text=_("Create Preset"), icon="ADD")
 
         layout.separator()
-        layout.prop(scene, "sls_import_config_path", text="Import")
-        layout.operator("simple_lip_sync.import_preset", text="Import Preset", icon="IMPORT")
-        layout.prop(scene, "sls_export_config_path", text="Export")
-        layout.operator("simple_lip_sync.export_preset", text="Export Selected Preset", icon="EXPORT")
-        layout.operator("simple_lip_sync.open_config_folder", text="Open User Preset Folder", icon="FILE_FOLDER")
+        layout.prop(scene, "sls_import_config_path", text=_("Import"))
+        layout.operator("simple_lip_sync.import_preset", text=_("Import Preset"), icon="IMPORT")
+        layout.prop(scene, "sls_export_config_path", text=_("Export"))
+        layout.operator("simple_lip_sync.export_preset", text=_("Export Selected Preset"), icon="EXPORT")
+        layout.operator(
+            "simple_lip_sync.open_config_folder",
+            text=_("Open User Preset Folder"),
+            icon="FILE_FOLDER",
+        )
 
 
 class SIMPLE_LIP_SYNC_OT_generate(bpy.types.Operator):
@@ -167,7 +177,12 @@ class SIMPLE_LIP_SYNC_OT_generate(bpy.types.Operator):
         context.window_manager.progress_end()
         if window:
             window.cursor_modal_restore()
-        self.report({"INFO"}, f"Generated lip sync for {result['mesh_count']} mesh object(s)")
+        self.report(
+            {"INFO"},
+            _("Generated lip sync for {mesh_count} mesh object(s)").format(
+                mesh_count=result["mesh_count"],
+            ),
+        )
         return {"FINISHED"}
 
 
@@ -208,7 +223,7 @@ class SIMPLE_LIP_SYNC_OT_create_preset(bpy.types.Operator):
 
         if entry:
             scene.sls_config_selection = entry["id"]
-        self.report({"INFO"}, "Created lip sync preset")
+        self.report({"INFO"}, _("Created lip sync preset"))
         return {"FINISHED"}
 
 
@@ -222,7 +237,7 @@ class SIMPLE_LIP_SYNC_OT_import_preset(bpy.types.Operator):
     def execute(self, context):
         scene = context.scene
         if not scene.sls_import_config_path:
-            self.report({"ERROR"}, "Please select a preset file to import")
+            self.report({"ERROR"}, _("Please select a preset file to import"))
             return {"CANCELLED"}
 
         try:
@@ -235,7 +250,7 @@ class SIMPLE_LIP_SYNC_OT_import_preset(bpy.types.Operator):
         if entry:
             scene.sls_config_selection = entry["id"]
         scene.sls_import_config_path = ""
-        self.report({"INFO"}, "Imported lip sync preset")
+        self.report({"INFO"}, _("Imported lip sync preset"))
         return {"FINISHED"}
 
 
@@ -249,7 +264,7 @@ class SIMPLE_LIP_SYNC_OT_export_preset(bpy.types.Operator):
     def execute(self, context):
         scene = context.scene
         if not scene.sls_export_config_path:
-            self.report({"ERROR"}, "Please choose an export path")
+            self.report({"ERROR"}, _("Please choose an export path"))
             return {"CANCELLED"}
 
         try:
@@ -262,7 +277,7 @@ class SIMPLE_LIP_SYNC_OT_export_preset(bpy.types.Operator):
             self.report({"ERROR"}, str(exc))
             return {"CANCELLED"}
 
-        self.report({"INFO"}, f"Exported preset: {exported_path}")
+        self.report({"INFO"}, _("Exported preset: {path}").format(path=exported_path))
         return {"FINISHED"}
 
 
@@ -289,7 +304,7 @@ class SIMPLE_LIP_SYNC_OT_open_config_folder(bpy.types.Operator):
             self.report({"ERROR"}, str(exc))
             return {"CANCELLED"}
 
-        self.report({"INFO"}, f"Opened preset folder: {config_dir}")
+        self.report({"INFO"}, _("Opened preset folder: {path}").format(path=config_dir))
         return {"FINISHED"}
 
 
@@ -525,4 +540,3 @@ def register_scene_properties():
     bpy.types.Scene.sls_shape_key_e = bpy.props.StringProperty(name="E", default="え")
     bpy.types.Scene.sls_shape_key_o = bpy.props.StringProperty(name="O", default="お")
     bpy.types.Scene.sls_shape_key_n = bpy.props.StringProperty(name="N", default="ん")
-

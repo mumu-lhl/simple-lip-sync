@@ -8,6 +8,7 @@ from ..audio.lips import Lips
 from ..core.config_manager import ConfigManager
 from ..core.profiles import get_lip_sync_preset_values
 from ..core.schema import CANONICAL_LIP_SYNC_KEYS
+from .i18n import translate as _
 
 _CONFIG_MANAGER = None
 
@@ -18,7 +19,7 @@ def get_config_manager():
     if _CONFIG_MANAGER is None:
         addon_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         user_scripts_dir = bpy.utils.user_resource("SCRIPTS")
-        _CONFIG_MANAGER = ConfigManager(addon_dir, user_scripts_dir)
+        _CONFIG_MANAGER = ConfigManager(addon_dir, user_scripts_dir, translate_func=_)
     return _CONFIG_MANAGER
 
 
@@ -27,7 +28,7 @@ def get_timeline_audio_items(_self, context):
     scene = context.scene
     se = scene.sequence_editor
     if not se:
-        return [("", "None", "No audio strips found")]
+        return [("", _("None"), _("No audio strips found"))]
 
     items = []
     seen_ids = set()
@@ -43,8 +44,12 @@ def get_timeline_audio_items(_self, context):
         uid = f"{strip.channel}:{strip.name}"
         if uid not in seen_ids:
             seen_ids.add(uid)
-            items.append((uid, strip.name, f"Channel {strip.channel}"))
-    return items if items else [("", "None", "No audio strips found")]
+            items.append((
+                uid,
+                strip.name,
+                _("Channel {channel}").format(channel=strip.channel),
+            ))
+    return items if items else [("", _("None"), _("No audio strips found"))]
 
 
 def get_lip_sync_config_items(_self, _context):
@@ -54,7 +59,7 @@ def get_lip_sync_config_items(_self, _context):
         (entry["id"], entry["display_name"], entry["description"])
         for entry in entries
     ]
-    return items if items else [("", "None", "No presets found")]
+    return items if items else [("", _("None"), _("No presets found"))]
 
 
 def generate_lip_sync(context):
@@ -71,7 +76,7 @@ def generate_lip_sync(context):
     wav_path = resolve_audio_path(scene)
     config = get_config_manager().load_config(scene.sls_config_selection)
     if not config:
-        raise ValueError("Please select a valid lip sync preset")
+        raise ValueError(_("Please select a valid lip sync preset"))
 
     tuning = resolve_tuning(scene)
     lips = Lips.mmd_lips_gen(
@@ -111,12 +116,12 @@ def resolve_audio_path(scene):
     if scene.sls_audio_source == "file":
         path = scene.sls_audio_path
         if not path:
-            raise ValueError("No audio file path specified")
+            raise ValueError(_("No audio file path specified"))
         return bpy.path.abspath(path)
 
     strip = find_timeline_audio_strip(scene)
     if strip is None:
-        raise ValueError("No timeline audio strip selected")
+        raise ValueError(_("No timeline audio strip selected"))
 
     filepath = None
     if strip.type == "SOUND":
@@ -124,7 +129,9 @@ def resolve_audio_path(scene):
     elif strip.type == "MOVIE":
         filepath = getattr(getattr(strip, "sound", None), "filepath", None)
     if not filepath:
-        raise ValueError(f"Selected strip '{strip.name}' has no valid audio filepath")
+        raise ValueError(
+            _("Selected strip '{name}' has no valid audio filepath").format(name=strip.name)
+        )
     return bpy.path.abspath(filepath)
 
 
@@ -147,7 +154,7 @@ def find_meshes_with_config(context, config):
     shape_keys = list(config.get("shape_keys", {}).values())
     selected_objects = context.selected_objects
     if not selected_objects:
-        raise ValueError("Please select an object first")
+        raise ValueError(_("Please select an object first"))
 
     found_objects = []
     seen = set()
@@ -156,7 +163,11 @@ def find_meshes_with_config(context, config):
 
     if not found_objects:
         joined_shape_keys = ", ".join(shape_keys)
-        raise ValueError(f"No selected mesh contains configured shape keys: {joined_shape_keys}")
+        raise ValueError(
+            _("No selected mesh contains configured shape keys: {shape_keys}").format(
+                shape_keys=joined_shape_keys,
+            )
+        )
     return found_objects
 
 
@@ -291,4 +302,3 @@ def set_shape_key_value(obj, shape_key_name, value, frame):
     shape_key = shape_keys.key_blocks[shape_key_name]
     shape_key.value = value
     shape_key.keyframe_insert(data_path="value", frame=frame)
-

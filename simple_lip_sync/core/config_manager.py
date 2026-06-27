@@ -13,10 +13,11 @@ USER_CONFIG_DIR_NAME = "simple_lip_sync"
 class ConfigManager:
     """Load, save, import, and export lip sync presets."""
 
-    def __init__(self, addon_dir, user_scripts_dir=None):
+    def __init__(self, addon_dir, user_scripts_dir=None, translate_func=None):
         self.addon_dir = addon_dir
         self.config_base_path = os.path.join(addon_dir, "configs", "lip_sync")
         self.user_config_path = self._ensure_user_config_root(user_scripts_dir)
+        self._translate = translate_func or (lambda text: text)
 
     def get_config_entries(self):
         """Return all valid built-in and user preset entries."""
@@ -121,14 +122,16 @@ class ConfigManager:
     def _build_config_id(source, file_name):
         return f"{source}:{file_name}"
 
-    @staticmethod
-    def _build_display_name(file_name, source):
-        source_label = "Built-in" if source == CONFIG_SOURCE_PREDEFINED else "User"
+    def _build_display_name(self, file_name, source):
+        source_label = self._translate(
+            "Built-in" if source == CONFIG_SOURCE_PREDEFINED else "User"
+        )
         return f"{file_name} [{source_label}]"
 
-    @staticmethod
-    def _build_description(config_data, source):
-        source_label = "Built-in" if source == CONFIG_SOURCE_PREDEFINED else "User"
+    def _build_description(self, config_data, source):
+        source_label = self._translate(
+            "Built-in" if source == CONFIG_SOURCE_PREDEFINED else "User"
+        )
         return f"{config_data['name']} ({source_label})"
 
     @staticmethod
@@ -159,4 +162,3 @@ class ConfigManager:
         )
         os.makedirs(user_config_dir, exist_ok=True)
         return user_config_dir
-
