@@ -45,5 +45,4 @@ Preset JSON files map canonical visemes (`a`, `i`, `u`, `e`, `o`, `n`) to shape-
 }
 ```
 
-User presets are stored in Blender's user scripts config directory under `configs/simple_lip_sync/lip_sync`.
-
+User presets are stored in Blender's user scripts preset directory under `presets/simple_lip_sync/lip_sync`, for example `~/.config/blender/5.1/scripts/presets/simple_lip_sync/lip_sync` on Linux.

@@ -22,30 +22,92 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
-      - name: Build add-on zip
+      - name: Install archive tools
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unzip xz-utils
+
+      - name: Build universal add-on zip without FFmpeg
         shell: bash
         run: |
           mkdir -p dist
-          python - <<'PY'
-import os
-import zipfile
+          python .github/scripts/package_addon.py \
+            --output "dist/simple_lip_sync-${{ steps.version.outputs.version }}-universal-no-ffmpeg.zip"
 
-root = "simple_lip_sync"
-output = os.path.join("dist", os.environ["ZIP_NAME"])
-excluded_dirs = {"__pycache__"}
-with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
-    for current_root, dirs, files in os.walk(root):
-        dirs[:] = [name for name in dirs if name not in excluded_dirs]
-        for file_name in files:
-            if file_name.endswith((".pyc", ".pyo")):
-                continue
-            path = os.path.join(current_root, file_name)
-            archive.write(path, path)
-PY
+      - name: Download Linux FFmpeg
+        shell: bash
+        run: |
+          mkdir -p build/ffmpeg/linux
+          curl -L "$FFMPEG_LINUX_URL" -o build/ffmpeg/linux.tar.xz
+          tar -xJf build/ffmpeg/linux.tar.xz -C build/ffmpeg/linux
+          FFMPEG_BIN="$(find build/ffmpeg/linux -type f -path '*/bin/ffmpeg' -print -quit)"
+          test -n "$FFMPEG_BIN"
+          cp "$FFMPEG_BIN" build/ffmpeg/linux/ffmpeg
+          chmod +x build/ffmpeg/linux/ffmpeg
+          test -x build/ffmpeg/linux/ffmpeg
         env:
-          ZIP_NAME: simple_lip_sync-${{ steps.version.outputs.version }}.zip
+          FFMPEG_LINUX_URL: https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz
+
+      - name: Build Linux add-on zip with FFmpeg
+        shell: bash
+        run: |
+          python .github/scripts/package_addon.py \
+            --output "dist/simple_lip_sync-${{ steps.version.outputs.version }}-linux-x64-ffmpeg.zip" \
+            --ffmpeg build/ffmpeg/linux/ffmpeg \
+            --ffmpeg-arcname simple_lip_sync/audio/lib/ffmpeg \
+            --ffmpeg-source-url "$FFMPEG_LINUX_URL"
+        env:
+          FFMPEG_LINUX_URL: https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz
+
+      - name: Download Windows FFmpeg
+        shell: bash
+        run: |
+          mkdir -p build/ffmpeg/windows
+          curl -L "$FFMPEG_WINDOWS_URL" -o build/ffmpeg/windows.zip
+          unzip -q build/ffmpeg/windows.zip -d build/ffmpeg/windows
+          FFMPEG_EXE="$(find build/ffmpeg/windows -path '*/bin/ffmpeg.exe' -print -quit)"
+          test -n "$FFMPEG_EXE"
+          cp "$FFMPEG_EXE" build/ffmpeg/windows/ffmpeg.exe
+        env:
+          FFMPEG_WINDOWS_URL: https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip
+
+      - name: Build Windows add-on zip with FFmpeg
+        shell: bash
+        run: |
+          python .github/scripts/package_addon.py \
+            --output "dist/simple_lip_sync-${{ steps.version.outputs.version }}-windows-x64-ffmpeg.zip" \
+            --ffmpeg build/ffmpeg/windows/ffmpeg.exe \
+            --ffmpeg-arcname simple_lip_sync/audio/lib/ffmpeg.exe \
+            --ffmpeg-source-url "$FFMPEG_WINDOWS_URL"
+        env:
+          FFMPEG_WINDOWS_URL: https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip
+
+      - name: Download macOS FFmpeg
+        shell: bash
+        run: |
+          mkdir -p build/ffmpeg/macos
+          curl -L "$FFMPEG_MACOS_URL" -o build/ffmpeg/macos.zip
+          unzip -q build/ffmpeg/macos.zip -d build/ffmpeg/macos
+          FFMPEG_BIN="$(find build/ffmpeg/macos -type f -name ffmpeg -print -quit)"
+          test -n "$FFMPEG_BIN"
+          cp "$FFMPEG_BIN" build/ffmpeg/macos/ffmpeg
+          chmod +x build/ffmpeg/macos/ffmpeg
+        env:
+          FFMPEG_MACOS_URL: https://evermeet.cx/ffmpeg/getrelease/zip
+
+      - name: Build macOS add-on zip with FFmpeg
+        shell: bash
+        run: |
+          python .github/scripts/package_addon.py \
+            --output "dist/simple_lip_sync-${{ steps.version.outputs.version }}-macos-ffmpeg.zip" \
+            --ffmpeg build/ffmpeg/macos/ffmpeg \
+            --ffmpeg-arcname simple_lip_sync/audio/lib/ffmpeg \
+            --ffmpeg-source-url "$FFMPEG_MACOS_URL"
+        env:
+          FFMPEG_MACOS_URL: https://evermeet.cx/ffmpeg/getrelease/zip
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/simple_lip_sync-${{ steps.version.outputs.version }}.zip
+          files: dist/*.zip

@@ -5,6 +5,7 @@ import tempfile
 import unittest
 
 from simple_lip_sync.core.config_manager import ConfigManager
+from simple_lip_sync.core.config_manager import CONFIG_SOURCE_PREDEFINED
 from simple_lip_sync.core.schema import ConfigValidationError, validate_lip_sync_config
 
 
@@ -58,6 +59,44 @@ class ConfigManagerTests(unittest.TestCase):
             export_path = os.path.join(temp_dir, "exported.json")
             manager.export_config(entry["id"], export_path)
             self.assertTrue(os.path.exists(export_path))
+
+    def test_user_configs_are_stored_in_blender_presets(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            addon_dir = os.path.abspath("simple_lip_sync")
+            manager = ConfigManager(addon_dir, temp_dir)
+
+            expected = os.path.join(
+                temp_dir,
+                "presets",
+                "simple_lip_sync",
+                "lip_sync",
+            )
+            self.assertEqual(manager.user_config_path, expected)
+
+    def test_save_from_display_name_slugifies_file_and_can_delete(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            addon_dir = os.path.abspath("simple_lip_sync")
+            manager = ConfigManager(addon_dir, temp_dir)
+
+            entry = manager.save_config_from_display_name("My Preset", VALID_CONFIG)
+            self.assertEqual(entry["name"], "my_preset.json")
+            self.assertTrue(os.path.exists(entry["path"]))
+
+            deleted = manager.delete_config(entry["id"])
+            self.assertEqual(deleted["id"], entry["id"])
+            self.assertFalse(os.path.exists(entry["path"]))
+
+    def test_delete_rejects_builtin_presets(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            addon_dir = os.path.abspath("simple_lip_sync")
+            manager = ConfigManager(addon_dir, temp_dir)
+            entry = next(
+                item for item in manager.get_config_entries()
+                if item["type"] == CONFIG_SOURCE_PREDEFINED
+            )
+
+            with self.assertRaises(ValueError):
+                manager.delete_config(entry["id"])
 
     def test_source_labels_can_be_translated(self):
         with tempfile.TemporaryDirectory() as temp_dir:

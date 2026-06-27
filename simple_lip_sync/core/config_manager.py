@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 
 from .schema import ConfigValidationError, validate_lip_sync_config
 
@@ -40,7 +41,7 @@ class ConfigManager:
                     "name": file_name,
                     "path": config_path,
                     "type": source,
-                    "display_name": self._build_display_name(file_name, source),
+                    "display_name": self._build_display_name(config_data, source),
                     "description": self._build_description(config_data, source),
                 })
         return entries
@@ -71,12 +72,24 @@ class ConfigManager:
 
     def save_config(self, config_file, config_data):
         """Save a preset to the user preset directory and return its entry."""
-        config_name = self._ensure_json_suffix(config_file)
+        config_name = self._allocate_user_config_name(
+            self.user_config_path,
+            self._ensure_json_suffix(config_file),
+        )
         config_path = os.path.join(self.user_config_path, config_name)
         normalized_config = validate_lip_sync_config(config_data)
         with open(config_path, "w", encoding="utf-8") as file:
             json.dump(normalized_config, file, indent=2, ensure_ascii=False)
         return self.resolve_config_entry(self._build_config_id(CONFIG_SOURCE_USER, config_name))
+
+    def save_config_from_display_name(self, display_name, config_data):
+        """Save a preset using a user-facing preset name."""
+        preset_name = display_name.strip()
+        if not preset_name:
+            raise ValueError(self._translate("Preset name is empty"))
+        config_data = dict(config_data)
+        config_data["name"] = preset_name
+        return self.save_config(self._slugify_file_name(preset_name), config_data)
 
     def import_config(self, source_path, config_name=None):
         """Import a JSON preset into the user preset directory."""
@@ -110,6 +123,16 @@ class ConfigManager:
             json.dump(config, file, indent=2, ensure_ascii=False)
         return target_path
 
+    def delete_config(self, selection):
+        """Delete a selected user preset and return the deleted entry."""
+        entry = self.resolve_config_entry(selection)
+        if entry is None:
+            raise ValueError(f"Preset not found: {selection}")
+        if entry["type"] != CONFIG_SOURCE_USER:
+            raise ValueError(self._translate("Only user presets can be deleted"))
+        os.remove(entry["path"])
+        return entry
+
     @staticmethod
     def _load_config_from_path(config_path):
         try:
@@ -122,11 +145,11 @@ class ConfigManager:
     def _build_config_id(source, file_name):
         return f"{source}:{file_name}"
 
-    def _build_display_name(self, file_name, source):
+    def _build_display_name(self, config_data, source):
         source_label = self._translate(
             "Built-in" if source == CONFIG_SOURCE_PREDEFINED else "User"
         )
-        return f"{file_name} [{source_label}]"
+        return f"{config_data['name']} [{source_label}]"
 
     def _build_description(self, config_data, source):
         source_label = self._translate(
@@ -141,6 +164,14 @@ class ConfigManager:
         return f"{file_name}.json"
 
     @staticmethod
+    def _slugify_file_name(display_name):
+        normalized = display_name.strip().lower()
+        normalized = re.sub(r"\s+", "_", normalized)
+        normalized = re.sub(r"[^0-9a-zA-Z_.-]+", "_", normalized)
+        normalized = normalized.strip("._-")
+        return normalized or "custom_lip_sync"
+
+    @staticmethod
     def _allocate_user_config_name(target_dir, desired_name):
         base_name, extension = os.path.splitext(desired_name)
         candidate = desired_name
@@ -150,13 +181,12 @@ class ConfigManager:
             index += 1
         return candidate
 
-    @staticmethod
-    def _ensure_user_config_root(user_scripts_dir):
+    def _ensure_user_config_root(self, user_scripts_dir):
         if user_scripts_dir is None:
             user_scripts_dir = os.path.join(os.path.expanduser("~"), ".config", "blender")
         user_config_dir = os.path.join(
             user_scripts_dir,
-            "configs",
+            "presets",
             USER_CONFIG_DIR_NAME,
             "lip_sync",
         )

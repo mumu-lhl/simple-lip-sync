@@ -5,7 +5,9 @@ import subprocess
 import sys
 
 import bpy
+from bpy_extras.io_utils import ExportHelper, ImportHelper
 
+from ..core.config_manager import CONFIG_SOURCE_USER
 from ..core.profiles import DEFAULT_LIP_SYNC_PRESET, get_lip_sync_preset_values
 from .i18n import translate as _
 from .service import (
@@ -14,6 +16,9 @@ from .service import (
     get_config_manager,
     get_lip_sync_config_items,
     get_timeline_audio_items,
+    get_user_lip_sync_config_items,
+    NO_LIP_SYNC_CONFIG_ID,
+    NO_USER_LIP_SYNC_CONFIG_ID,
 )
 
 DEFAULT_ADJUSTMENT_RULES = {
@@ -86,6 +91,7 @@ class SIMPLE_LIP_SYNC_PT_tuning(bpy.types.Panel):
     bl_region_type = "UI"
     bl_category = "Simple Lip Sync"
     bl_parent_id = "SIMPLE_LIP_SYNC_PT_main"
+    bl_order = 2
     bl_options = {"DEFAULT_CLOSED"}
 
     def draw(self, context):
@@ -114,13 +120,25 @@ class SIMPLE_LIP_SYNC_PT_presets(bpy.types.Panel):
     bl_region_type = "UI"
     bl_category = "Simple Lip Sync"
     bl_parent_id = "SIMPLE_LIP_SYNC_PT_main"
+    bl_order = 1
     bl_options = {"DEFAULT_CLOSED"}
 
     def draw(self, context):
         layout = self.layout
         scene = context.scene
 
-        layout.prop(scene, "sls_config_selection", text=_("Preset"))
+        config_manager = get_config_manager()
+        selected_entry = config_manager.resolve_config_entry(scene.sls_user_config_selection)
+
+        row = layout.row(align=True)
+        row.prop(scene, "sls_user_config_selection", text=_("User Preset"))
+        delete_row = row.row(align=True)
+        delete_row.enabled = selected_entry is not None and selected_entry["type"] == CONFIG_SOURCE_USER
+        delete_row.operator(
+            "simple_lip_sync.delete_preset",
+            text="",
+            icon="TRASH",
+        )
 
         row = layout.row(align=True)
         row.operator("simple_lip_sync.autofill_mmd", text=_("MMD"), icon="PRESET")
@@ -135,14 +153,10 @@ class SIMPLE_LIP_SYNC_PT_presets(bpy.types.Panel):
         grid.prop(scene, "sls_shape_key_o", text="O")
         grid.prop(scene, "sls_shape_key_n", text="N")
 
-        layout.prop(scene, "sls_create_config_name", text=_("Name"))
-        layout.prop(scene, "sls_create_config_file", text=_("File"))
         layout.operator("simple_lip_sync.create_preset", text=_("Create Preset"), icon="ADD")
 
         layout.separator()
-        layout.prop(scene, "sls_import_config_path", text=_("Import"))
         layout.operator("simple_lip_sync.import_preset", text=_("Import Preset"), icon="IMPORT")
-        layout.prop(scene, "sls_export_config_path", text=_("Export"))
         layout.operator("simple_lip_sync.export_preset", text=_("Export Selected Preset"), icon="EXPORT")
         layout.operator(
             "simple_lip_sync.open_config_folder",
@@ -193,6 +207,19 @@ class SIMPLE_LIP_SYNC_OT_create_preset(bpy.types.Operator):
     bl_label = "Create Lip Sync Preset"
     bl_description = "Create a user preset from the mapping fields"
 
+    preset_name: bpy.props.StringProperty(
+        name="Preset Name",
+        default="Custom Lip Sync",
+        maxlen=128,
+    )
+
+    def invoke(self, context, _event):
+        self.preset_name = context.scene.sls_create_config_name or "Custom Lip Sync"
+        return context.window_manager.invoke_props_dialog(self)
+
+    def draw(self, _context):
+        self.layout.prop(self, "preset_name", text=_("Name"))
+
     def execute(self, context):
         scene = context.scene
         mapping = {
@@ -204,7 +231,7 @@ class SIMPLE_LIP_SYNC_OT_create_preset(bpy.types.Operator):
             "n": scene.sls_shape_key_n,
         }
         config = {
-            "name": scene.sls_create_config_name or "Custom Lip Sync",
+            "name": self.preset_name or "Custom Lip Sync",
             "description": "User-created Simple Lip Sync preset",
             "version": "1.0",
             "author": "User",
@@ -213,64 +240,152 @@ class SIMPLE_LIP_SYNC_OT_create_preset(bpy.types.Operator):
             "adjustment_rules": DEFAULT_ADJUSTMENT_RULES,
         }
         try:
-            entry = get_config_manager().save_config(
-                scene.sls_create_config_file or scene.sls_create_config_name or "custom_lip_sync",
-                config,
-            )
+            entry = get_config_manager().save_config_from_display_name(self.preset_name, config)
         except Exception as exc:
             self.report({"ERROR"}, str(exc))
             return {"CANCELLED"}
 
+        _refresh_preset_ui(context)
         if entry:
             scene.sls_config_selection = entry["id"]
+            scene.sls_user_config_selection = entry["id"]
+        scene.sls_create_config_name = self.preset_name
+        _tag_ui_redraw(context)
         self.report({"INFO"}, _("Created lip sync preset"))
         return {"FINISHED"}
 
 
-class SIMPLE_LIP_SYNC_OT_import_preset(bpy.types.Operator):
+class SIMPLE_LIP_SYNC_OT_delete_preset(bpy.types.Operator):
+    """Delete the selected user lip sync preset."""
+
+    bl_idname = "simple_lip_sync.delete_preset"
+    bl_label = "Delete Lip Sync Preset"
+    bl_description = "Delete the selected user preset"
+
+    def invoke(self, context, event):
+        entry = get_config_manager().resolve_config_entry(context.scene.sls_user_config_selection)
+        if entry is None:
+            self.report({"ERROR"}, _("Please select a user preset"))
+            return {"CANCELLED"}
+        if entry["type"] != CONFIG_SOURCE_USER:
+            self.report({"ERROR"}, _("Only user presets can be deleted"))
+            return {"CANCELLED"}
+        return context.window_manager.invoke_confirm(
+            self,
+            event,
+            title=_("Delete Lip Sync Preset"),
+            message=_("Delete the selected user preset?"),
+            confirm_text=_("Delete"),
+            icon="ERROR",
+        )
+
+    def execute(self, context):
+        scene = context.scene
+        deleted_selection = scene.sls_user_config_selection
+        active_generation_selection = scene.sls_config_selection
+        try:
+            deleted_entry = get_config_manager().delete_config(deleted_selection)
+        except Exception as exc:
+            self.report({"ERROR"}, str(exc))
+            return {"CANCELLED"}
+
+        _refresh_preset_ui(context)
+        all_entries = get_config_manager().get_config_entries()
+        user_entries = [
+            entry for entry in all_entries
+            if entry["type"] == CONFIG_SOURCE_USER
+        ]
+        scene.sls_user_config_selection = (
+            user_entries[0]["id"] if user_entries else NO_USER_LIP_SYNC_CONFIG_ID
+        )
+        if active_generation_selection == deleted_entry["id"]:
+            scene.sls_config_selection = (
+                all_entries[0]["id"] if all_entries else NO_LIP_SYNC_CONFIG_ID
+            )
+        _tag_ui_redraw(context)
+        self.report(
+            {"INFO"},
+            _("Deleted preset: {name}").format(name=deleted_entry["name"]),
+        )
+        return {"FINISHED"}
+
+
+class SIMPLE_LIP_SYNC_OT_import_preset(bpy.types.Operator, ImportHelper):
     """Import a lip sync preset."""
 
     bl_idname = "simple_lip_sync.import_preset"
     bl_label = "Import Lip Sync Preset"
     bl_description = "Import a JSON lip sync preset into the user preset directory"
 
+    filename_ext = ".json"
+    filter_glob: bpy.props.StringProperty(
+        default="*.json",
+        options={"HIDDEN"},
+    )
+
     def execute(self, context):
         scene = context.scene
-        if not scene.sls_import_config_path:
+        if not self.filepath:
             self.report({"ERROR"}, _("Please select a preset file to import"))
             return {"CANCELLED"}
 
         try:
-            source_path = bpy.path.abspath(scene.sls_import_config_path)
+            source_path = bpy.path.abspath(self.filepath)
             entry = get_config_manager().import_config(source_path)
         except Exception as exc:
             self.report({"ERROR"}, str(exc))
             return {"CANCELLED"}
 
+        _refresh_preset_ui(context)
         if entry:
             scene.sls_config_selection = entry["id"]
-        scene.sls_import_config_path = ""
+            scene.sls_user_config_selection = entry["id"]
+        _tag_ui_redraw(context)
         self.report({"INFO"}, _("Imported lip sync preset"))
         return {"FINISHED"}
 
 
-class SIMPLE_LIP_SYNC_OT_export_preset(bpy.types.Operator):
+class SIMPLE_LIP_SYNC_OT_export_preset(bpy.types.Operator, ExportHelper):
     """Export the selected lip sync preset."""
 
     bl_idname = "simple_lip_sync.export_preset"
     bl_label = "Export Lip Sync Preset"
     bl_description = "Export the selected JSON preset"
 
+    filename_ext = ".json"
+    filter_glob: bpy.props.StringProperty(
+        default="*.json",
+        options={"HIDDEN"},
+    )
+
+    def invoke(self, context, event):
+        selected_entry = get_config_manager().resolve_config_entry(
+            context.scene.sls_user_config_selection
+        )
+        if selected_entry is None or selected_entry["type"] != CONFIG_SOURCE_USER:
+            self.report({"ERROR"}, _("Please select a user preset"))
+            return {"CANCELLED"}
+
+        config = get_config_manager().load_config(selected_entry["id"])
+        if config:
+            self.filepath = _ensure_json_suffix(config["name"])
+        return super().invoke(context, event)
+
     def execute(self, context):
-        scene = context.scene
-        if not scene.sls_export_config_path:
+        selected_entry = get_config_manager().resolve_config_entry(
+            context.scene.sls_user_config_selection
+        )
+        if selected_entry is None or selected_entry["type"] != CONFIG_SOURCE_USER:
+            self.report({"ERROR"}, _("Please select a user preset"))
+            return {"CANCELLED"}
+        if not self.filepath:
             self.report({"ERROR"}, _("Please choose an export path"))
             return {"CANCELLED"}
 
         try:
-            target_path = bpy.path.abspath(scene.sls_export_config_path)
+            target_path = bpy.path.abspath(self.filepath)
             exported_path = get_config_manager().export_config(
-                scene.sls_config_selection,
+                selected_entry["id"],
                 target_path,
             )
         except Exception as exc:
@@ -369,12 +484,32 @@ def _set_mapping(scene, mapping):
     scene.sls_shape_key_n = mapping["n"]
 
 
+def _ensure_json_suffix(file_name):
+    return file_name if file_name.endswith(".json") else f"{file_name}.json"
+
+
+def _refresh_preset_ui(context):
+    get_lip_sync_config_items(None, context)
+    get_user_lip_sync_config_items(None, context)
+
+
+def _tag_ui_redraw(context):
+    if context.area is not None:
+        context.area.tag_redraw()
+    screen = getattr(context, "screen", None)
+    if screen is None:
+        return
+    for area in screen.areas:
+        area.tag_redraw()
+
+
 CLASSES = (
     SIMPLE_LIP_SYNC_PT_main,
-    SIMPLE_LIP_SYNC_PT_tuning,
     SIMPLE_LIP_SYNC_PT_presets,
+    SIMPLE_LIP_SYNC_PT_tuning,
     SIMPLE_LIP_SYNC_OT_generate,
     SIMPLE_LIP_SYNC_OT_create_preset,
+    SIMPLE_LIP_SYNC_OT_delete_preset,
     SIMPLE_LIP_SYNC_OT_import_preset,
     SIMPLE_LIP_SYNC_OT_export_preset,
     SIMPLE_LIP_SYNC_OT_open_config_folder,
@@ -397,10 +532,8 @@ SCENE_PROPS = (
     "sls_max_morph_value",
     "sls_anticipation_scale",
     "sls_config_selection",
-    "sls_import_config_path",
-    "sls_export_config_path",
+    "sls_user_config_selection",
     "sls_create_config_name",
-    "sls_create_config_file",
     "sls_shape_key_a",
     "sls_shape_key_i",
     "sls_shape_key_u",
@@ -512,27 +645,15 @@ def register_scene_properties():
         description="Select the shape-key mapping preset",
         items=get_lip_sync_config_items,
     )
-    bpy.types.Scene.sls_import_config_path = bpy.props.StringProperty(
-        name="Import Preset",
-        default="",
-        maxlen=1024,
-        subtype="FILE_PATH",
-    )
-    bpy.types.Scene.sls_export_config_path = bpy.props.StringProperty(
-        name="Export Preset",
-        default="",
-        maxlen=1024,
-        subtype="FILE_PATH",
+    bpy.types.Scene.sls_user_config_selection = bpy.props.EnumProperty(
+        name="User Preset",
+        description="Select a user preset to manage",
+        items=get_user_lip_sync_config_items,
     )
     bpy.types.Scene.sls_create_config_name = bpy.props.StringProperty(
         name="Preset Name",
         default="Custom Lip Sync",
         maxlen=128,
-    )
-    bpy.types.Scene.sls_create_config_file = bpy.props.StringProperty(
-        name="Preset File",
-        default="custom_lip_sync.json",
-        maxlen=256,
     )
     bpy.types.Scene.sls_shape_key_a = bpy.props.StringProperty(name="A", default="あ")
     bpy.types.Scene.sls_shape_key_i = bpy.props.StringProperty(name="I", default="い")

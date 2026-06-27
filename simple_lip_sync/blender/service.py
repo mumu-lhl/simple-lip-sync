@@ -11,6 +11,12 @@ from ..core.schema import CANONICAL_LIP_SYNC_KEYS
 from .i18n import translate as _
 
 _CONFIG_MANAGER = None
+_TIMELINE_AUDIO_ENUM_ITEMS = []
+_LIP_SYNC_CONFIG_ENUM_ITEMS = []
+_USER_LIP_SYNC_CONFIG_ENUM_ITEMS = []
+NO_TIMELINE_AUDIO_ID = "__none_audio__"
+NO_LIP_SYNC_CONFIG_ID = "__none_lip_sync_preset__"
+NO_USER_LIP_SYNC_CONFIG_ID = "__none_user_lip_sync_preset__"
 
 
 def get_config_manager():
@@ -25,14 +31,17 @@ def get_config_manager():
 
 def get_timeline_audio_items(_self, context):
     """Build enum items for VSE sound strips."""
+    global _TIMELINE_AUDIO_ENUM_ITEMS
+
     scene = context.scene
     se = scene.sequence_editor
     if not se:
-        return [("", _("None"), _("No audio strips found"))]
+        _TIMELINE_AUDIO_ENUM_ITEMS = [(NO_TIMELINE_AUDIO_ID, _("None"), _("No audio strips found"))]
+        return _TIMELINE_AUDIO_ENUM_ITEMS
 
     items = []
     seen_ids = set()
-    for strip in sorted(se.sequences, key=lambda item: item.channel, reverse=True):
+    for strip in sorted(_iter_sequence_editor_strips(se), key=lambda item: item.channel, reverse=True):
         if strip.type == "SOUND":
             filepath = getattr(strip.sound, "filepath", None)
         elif strip.type == "MOVIE":
@@ -49,17 +58,43 @@ def get_timeline_audio_items(_self, context):
                 strip.name,
                 _("Channel {channel}").format(channel=strip.channel),
             ))
-    return items if items else [("", _("None"), _("No audio strips found"))]
+    _TIMELINE_AUDIO_ENUM_ITEMS = items if items else [
+        (NO_TIMELINE_AUDIO_ID, _("None"), _("No audio strips found")),
+    ]
+    return _TIMELINE_AUDIO_ENUM_ITEMS
 
 
 def get_lip_sync_config_items(_self, _context):
     """Build enum items for lip sync presets."""
+    global _LIP_SYNC_CONFIG_ENUM_ITEMS
+
     entries = get_config_manager().get_config_entries()
     items = [
         (entry["id"], entry["display_name"], entry["description"])
         for entry in entries
     ]
-    return items if items else [("", _("None"), _("No presets found"))]
+    _LIP_SYNC_CONFIG_ENUM_ITEMS = items if items else [
+        (NO_LIP_SYNC_CONFIG_ID, _("None"), _("No presets found")),
+    ]
+    return _LIP_SYNC_CONFIG_ENUM_ITEMS
+
+
+def get_user_lip_sync_config_items(_self, _context):
+    """Build enum items for user-managed lip sync presets."""
+    global _USER_LIP_SYNC_CONFIG_ENUM_ITEMS
+
+    entries = [
+        entry for entry in get_config_manager().get_config_entries()
+        if entry["type"] == "user"
+    ]
+    items = [
+        (entry["id"], entry["display_name"], entry["description"])
+        for entry in entries
+    ]
+    _USER_LIP_SYNC_CONFIG_ENUM_ITEMS = items if items else [
+        (NO_USER_LIP_SYNC_CONFIG_ID, _("None"), _("No user presets found")),
+    ]
+    return _USER_LIP_SYNC_CONFIG_ENUM_ITEMS
 
 
 def generate_lip_sync(context):
@@ -105,10 +140,19 @@ def find_timeline_audio_strip(scene):
     selected_uid = scene.sls_timeline_audio_strip
     if not selected_uid:
         return None
-    for strip in se.sequences:
+    for strip in _iter_sequence_editor_strips(se):
         if f"{strip.channel}:{strip.name}" == selected_uid:
             return strip
     return None
+
+
+def _iter_sequence_editor_strips(sequence_editor):
+    """Return timeline strips across Blender sequence editor API variants."""
+    for attr_name in ("strips_all", "sequences_all", "strips", "sequences"):
+        strips = getattr(sequence_editor, attr_name, None)
+        if strips is not None:
+            return list(strips)
+    return []
 
 
 def resolve_audio_path(scene):

@@ -6,7 +6,7 @@ DIST_DIR := "dist"
 check: lint test
 
 lint:
-    ruff check simple_lip_sync tests
+    ruff check simple_lip_sync tests .github/scripts
 
 test:
     python -m unittest discover -s tests
