@@ -1,0 +1,528 @@
+"""Blender UI and operators."""
+
+import os
+import subprocess
+import sys
+
+import bpy
+
+from ..core.profiles import DEFAULT_LIP_SYNC_PRESET, get_lip_sync_preset_values
+from .service import (
+    find_timeline_audio_strip,
+    generate_lip_sync,
+    get_config_manager,
+    get_lip_sync_config_items,
+    get_timeline_audio_items,
+)
+
+DEFAULT_ADJUSTMENT_RULES = {
+    "a": {"priority": 1.0, "adjustment_factor": 1.2},
+    "o": {"priority": 1.0, "adjustment_factor": 1.2},
+    "i": {"priority": 0.9, "adjustment_factor": 0.9},
+    "u": {"priority": 0.9, "adjustment_factor": 0.9},
+    "e": {"priority": 0.9, "adjustment_factor": 0.9},
+    "n": {"priority": 0.3, "adjustment_factor": 1.0},
+}
+
+MMD_DEFAULT_MAPPING = {
+    "a": "あ",
+    "i": "い",
+    "u": "う",
+    "e": "え",
+    "o": "お",
+    "n": "ん",
+}
+
+VRM_DEFAULT_MAPPING = {
+    "a": "A",
+    "i": "I",
+    "u": "U",
+    "e": "E",
+    "o": "O",
+    "n": "N",
+}
+
+
+class SIMPLE_LIP_SYNC_PT_main(bpy.types.Panel):
+    """Main lip sync panel."""
+
+    bl_label = "Simple Lip Sync"
+    bl_idname = "SIMPLE_LIP_SYNC_PT_main"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "Simple Lip Sync"
+
+    def draw(self, context):
+        layout = self.layout
+        scene = context.scene
+
+        layout.prop(scene, "sls_audio_source")
+        if scene.sls_audio_source == "file":
+            layout.prop(scene, "sls_audio_path")
+        else:
+            layout.prop(scene, "sls_timeline_audio_strip")
+            strip = find_timeline_audio_strip(scene)
+            if strip is not None:
+                layout.label(text=f"Audio starts at frame {int(strip.frame_final_start)}", icon="INFO")
+
+        layout.prop(scene, "sls_start_frame")
+        layout.prop(scene, "sls_generation_preset")
+        layout.prop(scene, "sls_config_selection", text="Preset")
+        layout.operator("simple_lip_sync.generate", text="Generate Lip Sync", icon="SOUND")
+
+
+class SIMPLE_LIP_SYNC_PT_tuning(bpy.types.Panel):
+    """Advanced tuning panel."""
+
+    bl_label = "Advanced"
+    bl_idname = "SIMPLE_LIP_SYNC_PT_tuning"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "Simple Lip Sync"
+    bl_parent_id = "SIMPLE_LIP_SYNC_PT_main"
+    bl_options = {"DEFAULT_CLOSED"}
+
+    def draw(self, context):
+        layout = self.layout
+        scene = context.scene
+
+        layout.prop(scene, "sls_use_custom_tuning")
+        if not scene.sls_use_custom_tuning:
+            layout.label(text="Using generation preset", icon="INFO")
+            return
+
+        layout.prop(scene, "sls_db_threshold")
+        layout.prop(scene, "sls_rms_threshold")
+        layout.prop(scene, "sls_buffer")
+        layout.prop(scene, "sls_approach_speed")
+        layout.prop(scene, "sls_max_morph_value")
+        layout.prop(scene, "sls_anticipation_scale")
+
+
+class SIMPLE_LIP_SYNC_PT_presets(bpy.types.Panel):
+    """Preset management panel."""
+
+    bl_label = "Presets"
+    bl_idname = "SIMPLE_LIP_SYNC_PT_presets"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "Simple Lip Sync"
+    bl_parent_id = "SIMPLE_LIP_SYNC_PT_main"
+    bl_options = {"DEFAULT_CLOSED"}
+
+    def draw(self, context):
+        layout = self.layout
+        scene = context.scene
+
+        layout.prop(scene, "sls_config_selection", text="Preset")
+
+        row = layout.row(align=True)
+        row.operator("simple_lip_sync.autofill_mmd", text="MMD", icon="PRESET")
+        row.operator("simple_lip_sync.autofill_vrm", text="VRM", icon="PRESET")
+        row.operator("simple_lip_sync.autofill_selected", text="Selected", icon="EYEDROPPER")
+
+        grid = layout.grid_flow(columns=2, align=True)
+        grid.prop(scene, "sls_shape_key_a", text="A")
+        grid.prop(scene, "sls_shape_key_i", text="I")
+        grid.prop(scene, "sls_shape_key_u", text="U")
+        grid.prop(scene, "sls_shape_key_e", text="E")
+        grid.prop(scene, "sls_shape_key_o", text="O")
+        grid.prop(scene, "sls_shape_key_n", text="N")
+
+        layout.prop(scene, "sls_create_config_name", text="Name")
+        layout.prop(scene, "sls_create_config_file", text="File")
+        layout.operator("simple_lip_sync.create_preset", text="Create Preset", icon="ADD")
+
+        layout.separator()
+        layout.prop(scene, "sls_import_config_path", text="Import")
+        layout.operator("simple_lip_sync.import_preset", text="Import Preset", icon="IMPORT")
+        layout.prop(scene, "sls_export_config_path", text="Export")
+        layout.operator("simple_lip_sync.export_preset", text="Export Selected Preset", icon="EXPORT")
+        layout.operator("simple_lip_sync.open_config_folder", text="Open User Preset Folder", icon="FILE_FOLDER")
+
+
+class SIMPLE_LIP_SYNC_OT_generate(bpy.types.Operator):
+    """Generate lip sync keyframes."""
+
+    bl_idname = "simple_lip_sync.generate"
+    bl_label = "Generate Lip Sync"
+    bl_description = "Generate lip sync keyframes for selected meshes"
+
+    def execute(self, context):
+        window = context.window
+        context.window_manager.progress_begin(0, 100)
+        if window:
+            window.cursor_modal_set("WAIT")
+        try:
+            context.window_manager.progress_update(10)
+            result = generate_lip_sync(context)
+            context.window_manager.progress_update(100)
+        except Exception as exc:
+            context.window_manager.progress_end()
+            if window:
+                window.cursor_modal_restore()
+            self.report({"ERROR"}, str(exc))
+            return {"CANCELLED"}
+
+        context.window_manager.progress_end()
+        if window:
+            window.cursor_modal_restore()
+        self.report({"INFO"}, f"Generated lip sync for {result['mesh_count']} mesh object(s)")
+        return {"FINISHED"}
+
+
+class SIMPLE_LIP_SYNC_OT_create_preset(bpy.types.Operator):
+    """Create a user lip sync preset."""
+
+    bl_idname = "simple_lip_sync.create_preset"
+    bl_label = "Create Lip Sync Preset"
+    bl_description = "Create a user preset from the mapping fields"
+
+    def execute(self, context):
+        scene = context.scene
+        mapping = {
+            "a": scene.sls_shape_key_a,
+            "i": scene.sls_shape_key_i,
+            "u": scene.sls_shape_key_u,
+            "e": scene.sls_shape_key_e,
+            "o": scene.sls_shape_key_o,
+            "n": scene.sls_shape_key_n,
+        }
+        config = {
+            "name": scene.sls_create_config_name or "Custom Lip Sync",
+            "description": "User-created Simple Lip Sync preset",
+            "version": "1.0",
+            "author": "User",
+            "type": "lip_sync",
+            "shape_keys": mapping,
+            "adjustment_rules": DEFAULT_ADJUSTMENT_RULES,
+        }
+        try:
+            entry = get_config_manager().save_config(
+                scene.sls_create_config_file or scene.sls_create_config_name or "custom_lip_sync",
+                config,
+            )
+        except Exception as exc:
+            self.report({"ERROR"}, str(exc))
+            return {"CANCELLED"}
+
+        if entry:
+            scene.sls_config_selection = entry["id"]
+        self.report({"INFO"}, "Created lip sync preset")
+        return {"FINISHED"}
+
+
+class SIMPLE_LIP_SYNC_OT_import_preset(bpy.types.Operator):
+    """Import a lip sync preset."""
+
+    bl_idname = "simple_lip_sync.import_preset"
+    bl_label = "Import Lip Sync Preset"
+    bl_description = "Import a JSON lip sync preset into the user preset directory"
+
+    def execute(self, context):
+        scene = context.scene
+        if not scene.sls_import_config_path:
+            self.report({"ERROR"}, "Please select a preset file to import")
+            return {"CANCELLED"}
+
+        try:
+            source_path = bpy.path.abspath(scene.sls_import_config_path)
+            entry = get_config_manager().import_config(source_path)
+        except Exception as exc:
+            self.report({"ERROR"}, str(exc))
+            return {"CANCELLED"}
+
+        if entry:
+            scene.sls_config_selection = entry["id"]
+        scene.sls_import_config_path = ""
+        self.report({"INFO"}, "Imported lip sync preset")
+        return {"FINISHED"}
+
+
+class SIMPLE_LIP_SYNC_OT_export_preset(bpy.types.Operator):
+    """Export the selected lip sync preset."""
+
+    bl_idname = "simple_lip_sync.export_preset"
+    bl_label = "Export Lip Sync Preset"
+    bl_description = "Export the selected JSON preset"
+
+    def execute(self, context):
+        scene = context.scene
+        if not scene.sls_export_config_path:
+            self.report({"ERROR"}, "Please choose an export path")
+            return {"CANCELLED"}
+
+        try:
+            target_path = bpy.path.abspath(scene.sls_export_config_path)
+            exported_path = get_config_manager().export_config(
+                scene.sls_config_selection,
+                target_path,
+            )
+        except Exception as exc:
+            self.report({"ERROR"}, str(exc))
+            return {"CANCELLED"}
+
+        self.report({"INFO"}, f"Exported preset: {exported_path}")
+        return {"FINISHED"}
+
+
+class SIMPLE_LIP_SYNC_OT_open_config_folder(bpy.types.Operator):
+    """Open the user preset folder."""
+
+    bl_idname = "simple_lip_sync.open_config_folder"
+    bl_label = "Open Lip Sync Preset Folder"
+    bl_description = "Open the user preset folder"
+
+    def execute(self, _context):
+        config_dir = get_config_manager().user_config_path
+        os.makedirs(config_dir, exist_ok=True)
+        try:
+            if os.name == "nt":
+                startfile = getattr(os, "startfile", None)
+                if not callable(startfile):
+                    raise OSError("os.startfile is unavailable")
+                startfile(config_dir)
+            else:
+                command = ["open", config_dir] if sys.platform == "darwin" else ["xdg-open", config_dir]
+                subprocess.run(command, check=True)
+        except (OSError, subprocess.SubprocessError) as exc:
+            self.report({"ERROR"}, str(exc))
+            return {"CANCELLED"}
+
+        self.report({"INFO"}, f"Opened preset folder: {config_dir}")
+        return {"FINISHED"}
+
+
+class SIMPLE_LIP_SYNC_OT_autofill_mmd(bpy.types.Operator):
+    """Fill mapping fields with MMD names."""
+
+    bl_idname = "simple_lip_sync.autofill_mmd"
+    bl_label = "Use MMD Mapping"
+
+    def execute(self, context):
+        _set_mapping(context.scene, MMD_DEFAULT_MAPPING)
+        return {"FINISHED"}
+
+
+class SIMPLE_LIP_SYNC_OT_autofill_vrm(bpy.types.Operator):
+    """Fill mapping fields with VRM names."""
+
+    bl_idname = "simple_lip_sync.autofill_vrm"
+    bl_label = "Use VRM Mapping"
+
+    def execute(self, context):
+        _set_mapping(context.scene, VRM_DEFAULT_MAPPING)
+        return {"FINISHED"}
+
+
+class SIMPLE_LIP_SYNC_OT_autofill_selected(bpy.types.Operator):
+    """Fill mapping fields from selected mesh shape keys."""
+
+    bl_idname = "simple_lip_sync.autofill_selected"
+    bl_label = "Use Selected Shape Keys"
+
+    def execute(self, context):
+        names = _selected_shape_key_names(context)
+        mapping = {}
+        for key, candidates in {
+            "a": ("あ", "A", "a"),
+            "i": ("い", "I", "i"),
+            "u": ("う", "U", "u"),
+            "e": ("え", "E", "e"),
+            "o": ("お", "O", "o"),
+            "n": ("ん", "N", "n"),
+        }.items():
+            mapping[key] = next((candidate for candidate in candidates if candidate in names), candidates[0])
+        _set_mapping(context.scene, mapping)
+        return {"FINISHED"}
+
+
+def _selected_shape_key_names(context):
+    names = set()
+    for obj in context.selected_objects:
+        if obj.type == "MESH" and obj.data.shape_keys:
+            names.update(key.name for key in obj.data.shape_keys.key_blocks)
+    return names
+
+
+def _set_mapping(scene, mapping):
+    scene.sls_shape_key_a = mapping["a"]
+    scene.sls_shape_key_i = mapping["i"]
+    scene.sls_shape_key_u = mapping["u"]
+    scene.sls_shape_key_e = mapping["e"]
+    scene.sls_shape_key_o = mapping["o"]
+    scene.sls_shape_key_n = mapping["n"]
+
+
+CLASSES = (
+    SIMPLE_LIP_SYNC_PT_main,
+    SIMPLE_LIP_SYNC_PT_tuning,
+    SIMPLE_LIP_SYNC_PT_presets,
+    SIMPLE_LIP_SYNC_OT_generate,
+    SIMPLE_LIP_SYNC_OT_create_preset,
+    SIMPLE_LIP_SYNC_OT_import_preset,
+    SIMPLE_LIP_SYNC_OT_export_preset,
+    SIMPLE_LIP_SYNC_OT_open_config_folder,
+    SIMPLE_LIP_SYNC_OT_autofill_mmd,
+    SIMPLE_LIP_SYNC_OT_autofill_vrm,
+    SIMPLE_LIP_SYNC_OT_autofill_selected,
+)
+
+SCENE_PROPS = (
+    "sls_audio_source",
+    "sls_timeline_audio_strip",
+    "sls_audio_path",
+    "sls_start_frame",
+    "sls_generation_preset",
+    "sls_use_custom_tuning",
+    "sls_buffer",
+    "sls_approach_speed",
+    "sls_db_threshold",
+    "sls_rms_threshold",
+    "sls_max_morph_value",
+    "sls_anticipation_scale",
+    "sls_config_selection",
+    "sls_import_config_path",
+    "sls_export_config_path",
+    "sls_create_config_name",
+    "sls_create_config_file",
+    "sls_shape_key_a",
+    "sls_shape_key_i",
+    "sls_shape_key_u",
+    "sls_shape_key_e",
+    "sls_shape_key_o",
+    "sls_shape_key_n",
+)
+
+
+def register():
+    """Register UI classes and scene properties."""
+    for cls in CLASSES:
+        bpy.utils.register_class(cls)
+    register_scene_properties()
+
+
+def unregister():
+    """Unregister UI classes and scene properties."""
+    for prop_name in reversed(SCENE_PROPS):
+        if hasattr(bpy.types.Scene, prop_name):
+            delattr(bpy.types.Scene, prop_name)
+    for cls in reversed(CLASSES):
+        bpy.utils.unregister_class(cls)
+
+
+def register_scene_properties():
+    """Register Scene properties used by the add-on."""
+    defaults = get_lip_sync_preset_values(DEFAULT_LIP_SYNC_PRESET)
+
+    bpy.types.Scene.sls_audio_source = bpy.props.EnumProperty(
+        name="Audio Source",
+        description="Where to get the audio for lip sync generation",
+        items=(
+            ("file", "File", "Use an audio file from disk"),
+            ("timeline", "Timeline", "Use audio from the Video Sequence Editor timeline"),
+        ),
+        default="file",
+    )
+    bpy.types.Scene.sls_timeline_audio_strip = bpy.props.EnumProperty(
+        name="Audio Strip",
+        description="Select an audio strip from the timeline",
+        items=get_timeline_audio_items,
+    )
+    bpy.types.Scene.sls_audio_path = bpy.props.StringProperty(
+        name="Audio Path",
+        description="Path to an audio file",
+        default="",
+        maxlen=1024,
+        subtype="FILE_PATH",
+    )
+    bpy.types.Scene.sls_start_frame = bpy.props.IntProperty(
+        name="Start Frame",
+        default=1,
+        min=1,
+    )
+    bpy.types.Scene.sls_generation_preset = bpy.props.EnumProperty(
+        name="Motion",
+        description="Choose the overall lip sync motion style",
+        items=(
+            ("natural", "Natural", "Smooth and balanced motion for most dialogue"),
+            ("clear", "Clear Speech", "Sharper mouth motion for clearer articulation"),
+            ("soft", "Soft Motion", "Smaller and softer mouth motion"),
+        ),
+        default=DEFAULT_LIP_SYNC_PRESET,
+    )
+    bpy.types.Scene.sls_use_custom_tuning = bpy.props.BoolProperty(
+        name="Custom Tuning",
+        description="Use manual tuning instead of the selected motion preset",
+        default=False,
+    )
+    bpy.types.Scene.sls_buffer = bpy.props.FloatProperty(
+        name="Delayed Opening",
+        default=defaults["buffer"],
+        min=0.0,
+        max=1.0,
+    )
+    bpy.types.Scene.sls_approach_speed = bpy.props.FloatProperty(
+        name="Opening Speed",
+        default=defaults["approach_speed"],
+        min=0.1,
+        max=10.0,
+    )
+    bpy.types.Scene.sls_db_threshold = bpy.props.FloatProperty(
+        name="DB Threshold",
+        default=defaults["db_threshold"],
+        min=-80.0,
+        max=0.0,
+    )
+    bpy.types.Scene.sls_rms_threshold = bpy.props.FloatProperty(
+        name="RMS Threshold",
+        default=defaults["rms_threshold"],
+        min=0.0001,
+        max=1.0,
+    )
+    bpy.types.Scene.sls_max_morph_value = bpy.props.FloatProperty(
+        name="Max Morph Value",
+        default=defaults["max_morph_value"],
+        min=0.01,
+        max=1.0,
+    )
+    bpy.types.Scene.sls_anticipation_scale = bpy.props.FloatProperty(
+        name="Anticipation",
+        default=defaults["anticipation_scale"],
+        min=0.2,
+        max=1.5,
+    )
+    bpy.types.Scene.sls_config_selection = bpy.props.EnumProperty(
+        name="Lip Sync Preset",
+        description="Select the shape-key mapping preset",
+        items=get_lip_sync_config_items,
+    )
+    bpy.types.Scene.sls_import_config_path = bpy.props.StringProperty(
+        name="Import Preset",
+        default="",
+        maxlen=1024,
+        subtype="FILE_PATH",
+    )
+    bpy.types.Scene.sls_export_config_path = bpy.props.StringProperty(
+        name="Export Preset",
+        default="",
+        maxlen=1024,
+        subtype="FILE_PATH",
+    )
+    bpy.types.Scene.sls_create_config_name = bpy.props.StringProperty(
+        name="Preset Name",
+        default="Custom Lip Sync",
+        maxlen=128,
+    )
+    bpy.types.Scene.sls_create_config_file = bpy.props.StringProperty(
+        name="Preset File",
+        default="custom_lip_sync.json",
+        maxlen=256,
+    )
+    bpy.types.Scene.sls_shape_key_a = bpy.props.StringProperty(name="A", default="あ")
+    bpy.types.Scene.sls_shape_key_i = bpy.props.StringProperty(name="I", default="い")
+    bpy.types.Scene.sls_shape_key_u = bpy.props.StringProperty(name="U", default="う")
+    bpy.types.Scene.sls_shape_key_e = bpy.props.StringProperty(name="E", default="え")
+    bpy.types.Scene.sls_shape_key_o = bpy.props.StringProperty(name="O", default="お")
+    bpy.types.Scene.sls_shape_key_n = bpy.props.StringProperty(name="N", default="ん")
+

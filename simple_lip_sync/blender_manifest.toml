@@ -1,0 +1,31 @@
+schema_version = "1.0.0"
+
+id = "simple_lip_sync"
+version = "0.1.0"
+name = "Simple Lip Sync"
+tagline = "Generate lip sync from audio"
+maintainer = "Simple Lip Sync contributors"
+type = "add-on"
+
+tags = ["Animation", "3D View", "Import-Export"]
+blender_version_min = "4.2.0"
+
+license = [
+  "SPDX:GPL-3.0-or-later",
+]
+
+copyright = [
+  "2024-2026 Half-Bottled Reverie",
+  "2026 Simple Lip Sync contributors",
+]
+
+[permissions]
+files = "Read audio files and import or export JSON presets"
+
+[build]
+paths_exclude_pattern = [
+  "__pycache__/",
+  "/.git/",
+  "/*.zip",
+  "/tests/",
+]

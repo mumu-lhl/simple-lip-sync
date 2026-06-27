@@ -1,0 +1,172 @@
+"""Preset schema and validation."""
+
+CANONICAL_LIP_SYNC_KEYS = ("a", "i", "u", "e", "o", "n")
+
+LIP_SYNC_KEY_ALIASES = {
+    "a": "a",
+    "A": "a",
+    "あ": "a",
+    "i": "i",
+    "I": "i",
+    "い": "i",
+    "u": "u",
+    "U": "u",
+    "う": "u",
+    "e": "e",
+    "E": "e",
+    "え": "e",
+    "o": "o",
+    "O": "o",
+    "お": "o",
+    "n": "n",
+    "N": "n",
+    "ん": "n",
+}
+
+
+class ConfigValidationError(ValueError):
+    """Raised when a lip sync preset is invalid."""
+
+
+def validate_lip_sync_config(config_data):
+    """Validate and normalize a lip sync preset dictionary."""
+    if not isinstance(config_data, dict):
+        raise ConfigValidationError("Config data must be a JSON object")
+
+    allowed_fields = {
+        "name",
+        "description",
+        "version",
+        "author",
+        "type",
+        "shape_keys",
+        "adjustment_rules",
+    }
+    unknown_fields = sorted(set(config_data.keys()) - allowed_fields)
+    if unknown_fields:
+        raise ConfigValidationError(
+            f"Unknown fields in lip sync config: {', '.join(unknown_fields)}"
+        )
+
+    raw_type = config_data.get("type")
+    if raw_type is not None and raw_type != "lip_sync":
+        raise ConfigValidationError(
+            f"Config field 'type' must be 'lip_sync', got '{raw_type}'"
+        )
+
+    normalized = {
+        "name": _require_non_empty_string(config_data.get("name"), "name"),
+        "description": _require_non_empty_string(
+            config_data.get("description"),
+            "description",
+        ),
+        "version": _require_non_empty_string(config_data.get("version"), "version"),
+        "type": "lip_sync",
+        "shape_keys": _validate_shape_keys(config_data.get("shape_keys")),
+        "adjustment_rules": _validate_adjustment_rules(
+            config_data.get("adjustment_rules", {})
+        ),
+    }
+
+    if "author" in config_data:
+        normalized["author"] = _require_non_empty_string(config_data.get("author"), "author")
+
+    return normalized
+
+
+def _require_non_empty_string(value, field_name):
+    if not isinstance(value, str) or not value.strip():
+        raise ConfigValidationError(f"Field '{field_name}' must be a non-empty string")
+    return value.strip()
+
+
+def _validate_shape_keys(shape_keys):
+    if not isinstance(shape_keys, dict) or not shape_keys:
+        raise ConfigValidationError("Field 'shape_keys' must be a non-empty object")
+
+    normalized = {}
+    for source_key, target_key in shape_keys.items():
+        normalized_key = _normalize_lip_sync_key(
+            _require_non_empty_string(source_key, "shape_keys key"),
+            "shape_keys key",
+        )
+        normalized_value = _require_non_empty_string(
+            target_key,
+            f"shape_keys.{normalized_key}",
+        )
+        if normalized_key in normalized and normalized[normalized_key] != normalized_value:
+            raise ConfigValidationError(
+                f"Duplicate canonical key in shape_keys: {normalized_key}"
+            )
+        normalized[normalized_key] = normalized_value
+
+    missing = [key for key in CANONICAL_LIP_SYNC_KEYS if key not in normalized]
+    if missing:
+        raise ConfigValidationError(
+            f"Missing shape key mappings: {', '.join(missing)}"
+        )
+    return normalized
+
+
+def _validate_adjustment_rules(adjustment_rules):
+    if adjustment_rules is None:
+        return {}
+    if not isinstance(adjustment_rules, dict):
+        raise ConfigValidationError("Field 'adjustment_rules' must be an object")
+
+    normalized = {}
+    for rule_name, rule in adjustment_rules.items():
+        normalized_name = _normalize_lip_sync_key(
+            _require_non_empty_string(rule_name, "adjustment_rules key"),
+            "adjustment_rules key",
+        )
+        if not isinstance(rule, dict):
+            raise ConfigValidationError(
+                f"Field 'adjustment_rules.{normalized_name}' must be an object"
+            )
+
+        normalized_rule = {}
+        if "priority" in rule:
+            normalized_rule["priority"] = _validate_number(
+                rule["priority"],
+                f"adjustment_rules.{normalized_name}.priority",
+                minimum=0.0,
+            )
+        if "adjustment_factor" in rule:
+            normalized_rule["adjustment_factor"] = _validate_number(
+                rule["adjustment_factor"],
+                f"adjustment_rules.{normalized_name}.adjustment_factor",
+                minimum=0.0,
+            )
+
+        unknown_fields = sorted(set(rule.keys()) - {"priority", "adjustment_factor"})
+        if unknown_fields:
+            raise ConfigValidationError(
+                f"Unknown fields in adjustment_rules.{normalized_name}: "
+                f"{', '.join(unknown_fields)}"
+            )
+
+        normalized[normalized_name] = normalized_rule
+    return normalized
+
+
+def _validate_number(value, field_name, minimum=None, maximum=None):
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        raise ConfigValidationError(f"Field '{field_name}' must be a number")
+
+    normalized = float(value)
+    if minimum is not None and normalized < minimum:
+        raise ConfigValidationError(f"Field '{field_name}' must be >= {minimum}")
+    if maximum is not None and normalized > maximum:
+        raise ConfigValidationError(f"Field '{field_name}' must be <= {maximum}")
+    return normalized
+
+
+def _normalize_lip_sync_key(value, field_name):
+    normalized = LIP_SYNC_KEY_ALIASES.get(value)
+    if normalized is None:
+        raise ConfigValidationError(
+            f"Unsupported lip sync key '{value}' in field '{field_name}'"
+        )
+    return normalized
+

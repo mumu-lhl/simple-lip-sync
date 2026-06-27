@@ -1,0 +1,12 @@
+# Simple Lip Sync
+
+Blender add-on for generating MMD-style lip sync shape-key animation from audio.
+
+Install this folder as a Blender add-on or install the release zip. The panel is available at:
+
+`View3D > Sidebar > Simple Lip Sync`
+
+The add-on includes MMD and VRM mapping presets. User presets can be created, imported, exported, and opened from the Presets panel.
+
+FFmpeg is used for audio conversion when available. Put a bundled executable at `audio/lib/ffmpeg` or `audio/lib/ffmpeg.exe`, or install FFmpeg on `PATH`. PCM WAV input can be analyzed directly without FFmpeg.
+
