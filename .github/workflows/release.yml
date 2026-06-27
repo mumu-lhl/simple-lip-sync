@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  build-release:
+  build-universal:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -22,12 +22,6 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
-      - name: Install archive tools
-        shell: bash
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y unzip xz-utils
-
       - name: Build universal add-on zip without FFmpeg
         shell: bash
         run: |
@@ -35,79 +29,130 @@ jobs:
           python .github/scripts/package_addon.py \
             --output "dist/simple_lip_sync-${{ steps.version.outputs.version }}-universal-no-ffmpeg.zip"
 
-      - name: Download Linux FFmpeg
+      - name: Upload universal artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-universal
+          path: dist/*.zip
+
+  build-platform:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-x64
+            runner: ubuntu-latest
+            library_path: native/simple_lip_sync_audio/target/release/libsimple_lip_sync_audio.so
+            native_arcname: simple_lip_sync/audio/native/linux-x64/libsimple_lip_sync_audio.so
+            ffmpeg_url: https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz
+            ffmpeg_arcname: simple_lip_sync/audio/lib/ffmpeg
+            ffmpeg_output: build/ffmpeg/ffmpeg
+            archive_name: simple_lip_sync-{version}-linux-x64-ffmpeg.zip
+          - platform: windows-x64
+            runner: windows-latest
+            library_path: native/simple_lip_sync_audio/target/release/simple_lip_sync_audio.dll
+            native_arcname: simple_lip_sync/audio/native/windows-x64/simple_lip_sync_audio.dll
+            ffmpeg_url: https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip
+            ffmpeg_arcname: simple_lip_sync/audio/lib/ffmpeg.exe
+            ffmpeg_output: build/ffmpeg/ffmpeg.exe
+            archive_name: simple_lip_sync-{version}-windows-x64-ffmpeg.zip
+          - platform: macos
+            runner: macos-latest
+            library_path: native/simple_lip_sync_audio/target/release/libsimple_lip_sync_audio.dylib
+            native_arcname: simple_lip_sync/audio/native/macos-arm64/libsimple_lip_sync_audio.dylib
+            ffmpeg_url: https://evermeet.cx/ffmpeg/getrelease/zip
+            ffmpeg_arcname: simple_lip_sync/audio/lib/ffmpeg
+            ffmpeg_output: build/ffmpeg/ffmpeg
+            archive_name: simple_lip_sync-{version}-macos-ffmpeg.zip
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read version
+        id: version
         shell: bash
         run: |
-          mkdir -p build/ffmpeg/linux
-          curl -L "$FFMPEG_LINUX_URL" -o build/ffmpeg/linux.tar.xz
-          tar -xJf build/ffmpeg/linux.tar.xz -C build/ffmpeg/linux
-          FFMPEG_BIN="$(find build/ffmpeg/linux -type f -path '*/bin/ffmpeg' -print -quit)"
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Build native audio backend
+        shell: bash
+        run: cargo build --manifest-path native/simple_lip_sync_audio/Cargo.toml --release
+
+      - name: Download FFmpeg
+        shell: bash
+        run: |
+          mkdir -p build/ffmpeg
+          curl -L "${{ matrix.ffmpeg_url }}" -o build/ffmpeg/archive
+
+      - name: Extract Linux FFmpeg
+        if: matrix.platform == 'linux-x64'
+        shell: bash
+        run: |
+          mkdir -p build/ffmpeg/extract
+          tar -xJf build/ffmpeg/archive -C build/ffmpeg/extract
+          FFMPEG_BIN="$(find build/ffmpeg/extract -type f -path '*/bin/ffmpeg' -print -quit)"
           test -n "$FFMPEG_BIN"
-          cp "$FFMPEG_BIN" build/ffmpeg/linux/ffmpeg
-          chmod +x build/ffmpeg/linux/ffmpeg
-          test -x build/ffmpeg/linux/ffmpeg
-        env:
-          FFMPEG_LINUX_URL: https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz
+          cp "$FFMPEG_BIN" "${{ matrix.ffmpeg_output }}"
+          chmod +x "${{ matrix.ffmpeg_output }}"
 
-      - name: Build Linux add-on zip with FFmpeg
+      - name: Extract Windows FFmpeg
+        if: matrix.platform == 'windows-x64'
         shell: bash
         run: |
-          python .github/scripts/package_addon.py \
-            --output "dist/simple_lip_sync-${{ steps.version.outputs.version }}-linux-x64-ffmpeg.zip" \
-            --ffmpeg build/ffmpeg/linux/ffmpeg \
-            --ffmpeg-arcname simple_lip_sync/audio/lib/ffmpeg \
-            --ffmpeg-source-url "$FFMPEG_LINUX_URL"
-        env:
-          FFMPEG_LINUX_URL: https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz
-
-      - name: Download Windows FFmpeg
-        shell: bash
-        run: |
-          mkdir -p build/ffmpeg/windows
-          curl -L "$FFMPEG_WINDOWS_URL" -o build/ffmpeg/windows.zip
-          unzip -q build/ffmpeg/windows.zip -d build/ffmpeg/windows
-          FFMPEG_EXE="$(find build/ffmpeg/windows -path '*/bin/ffmpeg.exe' -print -quit)"
+          mkdir -p build/ffmpeg/extract
+          7z x build/ffmpeg/archive -obuild/ffmpeg/extract -y
+          FFMPEG_EXE="$(find build/ffmpeg/extract -path '*/bin/ffmpeg.exe' -print -quit)"
           test -n "$FFMPEG_EXE"
-          cp "$FFMPEG_EXE" build/ffmpeg/windows/ffmpeg.exe
-        env:
-          FFMPEG_WINDOWS_URL: https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip
+          cp "$FFMPEG_EXE" "${{ matrix.ffmpeg_output }}"
 
-      - name: Build Windows add-on zip with FFmpeg
+      - name: Extract macOS FFmpeg
+        if: matrix.platform == 'macos'
         shell: bash
         run: |
-          python .github/scripts/package_addon.py \
-            --output "dist/simple_lip_sync-${{ steps.version.outputs.version }}-windows-x64-ffmpeg.zip" \
-            --ffmpeg build/ffmpeg/windows/ffmpeg.exe \
-            --ffmpeg-arcname simple_lip_sync/audio/lib/ffmpeg.exe \
-            --ffmpeg-source-url "$FFMPEG_WINDOWS_URL"
-        env:
-          FFMPEG_WINDOWS_URL: https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip
-
-      - name: Download macOS FFmpeg
-        shell: bash
-        run: |
-          mkdir -p build/ffmpeg/macos
-          curl -L "$FFMPEG_MACOS_URL" -o build/ffmpeg/macos.zip
-          unzip -q build/ffmpeg/macos.zip -d build/ffmpeg/macos
-          FFMPEG_BIN="$(find build/ffmpeg/macos -type f -name ffmpeg -print -quit)"
+          mkdir -p build/ffmpeg/extract
+          unzip -q build/ffmpeg/archive -d build/ffmpeg/extract
+          FFMPEG_BIN="$(find build/ffmpeg/extract -type f -name ffmpeg -print -quit)"
           test -n "$FFMPEG_BIN"
-          cp "$FFMPEG_BIN" build/ffmpeg/macos/ffmpeg
-          chmod +x build/ffmpeg/macos/ffmpeg
-        env:
-          FFMPEG_MACOS_URL: https://evermeet.cx/ffmpeg/getrelease/zip
+          cp "$FFMPEG_BIN" "${{ matrix.ffmpeg_output }}"
+          chmod +x "${{ matrix.ffmpeg_output }}"
 
-      - name: Build macOS add-on zip with FFmpeg
+      - name: Package platform add-on zip
         shell: bash
         run: |
+          mkdir -p dist
+          ARCHIVE_NAME="${{ matrix.archive_name }}"
+          ARCHIVE_NAME="${ARCHIVE_NAME/\{version\}/${{ steps.version.outputs.version }}}"
           python .github/scripts/package_addon.py \
-            --output "dist/simple_lip_sync-${{ steps.version.outputs.version }}-macos-ffmpeg.zip" \
-            --ffmpeg build/ffmpeg/macos/ffmpeg \
-            --ffmpeg-arcname simple_lip_sync/audio/lib/ffmpeg \
-            --ffmpeg-source-url "$FFMPEG_MACOS_URL"
-        env:
-          FFMPEG_MACOS_URL: https://evermeet.cx/ffmpeg/getrelease/zip
+            --output "dist/${ARCHIVE_NAME}" \
+            --ffmpeg "${{ matrix.ffmpeg_output }}" \
+            --ffmpeg-arcname "${{ matrix.ffmpeg_arcname }}" \
+            --ffmpeg-source-url "${{ matrix.ffmpeg_url }}" \
+            --native-library "${{ matrix.library_path }}" \
+            --native-arcname "${{ matrix.native_arcname }}"
+
+      - name: Upload platform artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.platform }}
+          path: dist/*.zip
+
+  publish:
+    runs-on: ubuntu-latest
+    needs:
+      - build-universal
+      - build-platform
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: release-*
+          merge-multiple: true
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*.zip
+

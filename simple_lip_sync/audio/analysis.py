@@ -11,14 +11,35 @@ from ..core.viseme_curve import (
     score_visemes_from_formant_energy,
     zero_weights,
 )
+from . import native_backend
 
 
 def analyze_wav(audio_path, db_threshold=-50.0, rms_threshold=0.01):
     """Return timestamped viseme samples from a mono or stereo PCM WAV file."""
     samples, sample_rate = load_wav_samples(audio_path)
+    return analyze_samples(samples, sample_rate, db_threshold, rms_threshold)
+
+
+def analyze_samples(samples, sample_rate, db_threshold=-50.0, rms_threshold=0.01):
+    """Return timestamped viseme samples from normalized mono float samples."""
     if not samples:
         return []
 
+    try:
+        return native_backend.analyze_samples(
+            samples,
+            sample_rate,
+            db_threshold=db_threshold,
+            rms_threshold=rms_threshold,
+        )
+    except RuntimeError:
+        pass
+
+    return analyze_samples_python(samples, sample_rate, db_threshold, rms_threshold)
+
+
+def analyze_samples_python(samples, sample_rate, db_threshold=-50.0, rms_threshold=0.01):
+    """Return timestamped viseme samples with the pure Python analyzer."""
     frame_length = max(512, int(sample_rate * 0.064))
     hop_length = max(80, int(sample_rate * 0.010))
     if len(samples) < frame_length:
@@ -142,4 +163,3 @@ def _goertzel_power(samples, sample_rate, frequency):
         previous = current
     power = (previous2 * previous2) + (previous * previous) - (coefficient * previous * previous2)
     return max(0.0, power / max(1, len(samples)))
-

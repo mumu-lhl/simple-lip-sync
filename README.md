@@ -10,7 +10,7 @@ It generates shape-key animation from an audio file or a Video Sequence Editor a
 - Python 3.11 through 3.13 in Blender
 - Windows, Linux, and macOS
 
-The audio analyzer uses only Python standard-library modules. FFmpeg is used for audio conversion when available. If FFmpeg is not bundled with the add-on or available on `PATH`, only PCM WAV input can be analyzed directly.
+The add-on can use an optional native Rust audio analysis backend when a platform release archive includes it. If that backend is unavailable, it falls back to a Python standard-library analyzer. FFmpeg is used for audio conversion when available. If FFmpeg is not bundled with the add-on or available on `PATH`, only PCM WAV input can be analyzed directly.
 
 ## Install
 

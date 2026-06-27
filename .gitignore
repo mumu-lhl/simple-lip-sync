@@ -13,4 +13,10 @@ wheels/
 *.blend1
 *.zip
 
-uma_preset_importer/
+# Native build output
+native/**/target/
+simple_lip_sync/audio/native/
+
+*.so
+*.dylib
+*.dll

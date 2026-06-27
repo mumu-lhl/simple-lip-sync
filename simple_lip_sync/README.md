@@ -11,3 +11,5 @@ The add-on includes MMD and VRM mapping presets. User presets can be created, de
 User presets are stored under Blender's user scripts preset directory: `presets/simple_lip_sync/lip_sync`.
 
 FFmpeg is used for audio conversion when available. Put a bundled executable at `audio/lib/ffmpeg` or `audio/lib/ffmpeg.exe`, or install FFmpeg on `PATH`. PCM WAV input can be analyzed directly without FFmpeg.
+
+Platform release archives may include a native Rust audio analysis backend under `audio/native`. If it cannot be loaded, the add-on automatically falls back to the pure Python analyzer.
