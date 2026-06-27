@@ -24,6 +24,9 @@ Zip the `simple_lip_sync` directory or download a release archive, then install 
 4. Choose the MMD or VRM preset, or create/import a custom preset.
 5. Click `Generate Lip Sync`.
 
+For tuning slower, softer, clearer, or less noisy mouth motion, see the Chinese
+[Advanced Tuning Guide](docs/advanced_tuning_guide_zh.md).
+
 ## Presets
 
 Preset JSON files map canonical visemes (`a`, `i`, `u`, `e`, `o`, `n`) to shape-key names and optionally tune their strength:
