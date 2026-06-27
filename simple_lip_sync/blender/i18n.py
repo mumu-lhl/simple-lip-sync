@@ -7,6 +7,7 @@ CONTEXT = "*"
 
 ZH_CN = {
     "Advanced": "高级",
+    "A user preset named '{name}' already exists": "名为“{name}”的用户预设已存在",
     "Anticipation": "预判",
     "Audio Path": "音频路径",
     "Audio Source": "音频来源",

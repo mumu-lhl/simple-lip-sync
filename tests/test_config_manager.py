@@ -1,6 +1,7 @@
 """Tests for preset validation and config management."""
 
 import os
+import json
 import tempfile
 import unittest
 
@@ -85,6 +86,30 @@ class ConfigManagerTests(unittest.TestCase):
             deleted = manager.delete_config(entry["id"])
             self.assertEqual(deleted["id"], entry["id"])
             self.assertFalse(os.path.exists(entry["path"]))
+
+    def test_save_from_display_name_rejects_duplicate_names(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            addon_dir = os.path.abspath("simple_lip_sync")
+            manager = ConfigManager(addon_dir, temp_dir)
+
+            manager.save_config_from_display_name("My Preset", VALID_CONFIG)
+            with self.assertRaises(ValueError):
+                manager.save_config_from_display_name("My Preset", VALID_CONFIG)
+
+    def test_import_rejects_duplicate_user_preset_names(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            addon_dir = os.path.abspath("simple_lip_sync")
+            manager = ConfigManager(addon_dir, temp_dir)
+            manager.save_config_from_display_name("Imported Preset", VALID_CONFIG)
+
+            import_path = os.path.join(temp_dir, "imported.json")
+            config = dict(VALID_CONFIG)
+            config["name"] = "Imported Preset"
+            with open(import_path, "w", encoding="utf-8") as file:
+                json.dump(config, file)
+
+            with self.assertRaises(ValueError):
+                manager.import_config(import_path)
 
     def test_delete_rejects_builtin_presets(self):
         with tempfile.TemporaryDirectory() as temp_dir:

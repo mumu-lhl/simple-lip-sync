@@ -253,15 +253,14 @@ def set_lips_to_mesh_with_config(mesh, lips, start_frame, config):
     for target_morph_key, morph_frames in target_tracks.items():
         if target_morph_key not in existing_morphs:
             continue
-        for morph_frame in morph_frames:
-            if morph_frame["frame"] < start:
-                continue
-            set_shape_key_value(
-                mesh,
-                target_morph_key,
-                morph_frame["value"],
-                morph_frame["frame"],
-            )
+        set_shape_key_values(
+            mesh,
+            target_morph_key,
+            [
+                morph_frame for morph_frame in morph_frames
+                if morph_frame["frame"] >= start
+            ],
+        )
 
 
 def build_target_tracks(lips, shape_key_mapping, adjustment_rules):
@@ -319,30 +318,88 @@ def clear_shape_key_keyframes_in_range(obj, shape_key_name, start_frame, end_fra
     if not anim_data or not anim_data.action:
         return
 
-    data_path = shape_key.path_from_id("value")
-    for fcurve in list(anim_data.action.fcurves):
-        if fcurve.data_path != data_path:
-            continue
-        for index in range(len(fcurve.keyframe_points) - 1, -1, -1):
-            keyframe = fcurve.keyframe_points[index]
-            if float(start_frame) <= keyframe.co[0] <= float(end_frame):
-                fcurve.keyframe_points.remove(keyframe)
-        if not fcurve.keyframe_points:
-            anim_data.action.fcurves.remove(fcurve)
-        else:
-            fcurve.update()
+    fcurve = _get_shape_key_fcurve(shape_keys, shape_key, create=False)
+    if fcurve is None:
         return
 
+    for index in range(len(fcurve.keyframe_points) - 1, -1, -1):
+        keyframe = fcurve.keyframe_points[index]
+        if float(start_frame) <= keyframe.co[0] <= float(end_frame):
+            fcurve.keyframe_points.remove(keyframe)
 
-def set_shape_key_value(obj, shape_key_name, value, frame):
-    """Set and keyframe one shape key value."""
+    if fcurve.keyframe_points:
+        fcurve.update()
+    else:
+        _remove_shape_key_fcurve(shape_keys, fcurve)
+
+
+def set_shape_key_values(obj, shape_key_name, morph_frames):
+    """Batch set and keyframe one shape key track."""
     if not obj or obj.type != "MESH":
         raise ValueError("The object is not a mesh")
+    if not morph_frames:
+        return
 
     shape_keys = obj.data.shape_keys
     if not shape_keys or shape_key_name not in shape_keys.key_blocks:
         raise ValueError(f"The shape key '{shape_key_name}' does not exist")
 
     shape_key = shape_keys.key_blocks[shape_key_name]
-    shape_key.value = value
-    shape_key.keyframe_insert(data_path="value", frame=frame)
+    shape_key.value = morph_frames[-1]["value"]
+
+    if shape_keys.animation_data is None:
+        shape_keys.animation_data_create()
+    if shape_keys.animation_data.action is None:
+        shape_keys.animation_data.action = bpy.data.actions.new(
+            name=f"{obj.name} Shape Keys",
+        )
+
+    fcurve = _get_shape_key_fcurve(shape_keys, shape_key, create=True)
+    if fcurve is None:
+        raise ValueError(f"Failed to create F-Curve for shape key '{shape_key_name}'")
+
+    start_index = len(fcurve.keyframe_points)
+    fcurve.keyframe_points.add(len(morph_frames))
+    for keyframe, morph_frame in zip(
+        fcurve.keyframe_points[start_index:],
+        morph_frames,
+        strict=True,
+    ):
+        keyframe.co = (float(morph_frame["frame"]), float(morph_frame["value"]))
+        keyframe.interpolation = "BEZIER"
+    fcurve.update()
+
+
+def _get_shape_key_fcurve(shape_keys, shape_key, create):
+    action = getattr(getattr(shape_keys, "animation_data", None), "action", None)
+    if action is None:
+        return None
+
+    data_path = shape_key.path_from_id("value")
+    ensure_for_datablock = getattr(action, "fcurve_ensure_for_datablock", None)
+    if callable(ensure_for_datablock):
+        if not create and not _action_may_contain_fcurves(action):
+            return None
+        return ensure_for_datablock(shape_keys, data_path, index=0)
+
+    fcurves = getattr(action, "fcurves", None)
+    if fcurves is None:
+        return None
+
+    fcurve = fcurves.find(data_path=data_path)
+    if fcurve is None and create:
+        fcurve = fcurves.new(data_path=data_path)
+    return fcurve
+
+
+def _remove_shape_key_fcurve(shape_keys, fcurve):
+    action = getattr(getattr(shape_keys, "animation_data", None), "action", None)
+    fcurves = getattr(action, "fcurves", None)
+    if fcurves is not None:
+        fcurves.remove(fcurve)
+
+
+def _action_may_contain_fcurves(action):
+    if hasattr(action, "fcurves"):
+        return True
+    return bool(getattr(action, "layers", None) or getattr(action, "slots", None))

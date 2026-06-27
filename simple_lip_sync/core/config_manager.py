@@ -72,12 +72,13 @@ class ConfigManager:
 
     def save_config(self, config_file, config_data):
         """Save a preset to the user preset directory and return its entry."""
+        normalized_config = validate_lip_sync_config(config_data)
+        self._ensure_unique_user_preset_name(normalized_config["name"])
         config_name = self._allocate_user_config_name(
             self.user_config_path,
             self._ensure_json_suffix(config_file),
         )
         config_path = os.path.join(self.user_config_path, config_name)
-        normalized_config = validate_lip_sync_config(config_data)
         with open(config_path, "w", encoding="utf-8") as file:
             json.dump(normalized_config, file, indent=2, ensure_ascii=False)
         return self.resolve_config_entry(self._build_config_id(CONFIG_SOURCE_USER, config_name))
@@ -97,6 +98,7 @@ class ConfigManager:
             raise FileNotFoundError(f"Source file not found: {source_path}")
         with open(source_path, "r", encoding="utf-8") as file:
             normalized_config = validate_lip_sync_config(json.load(file))
+        self._ensure_unique_user_preset_name(normalized_config["name"])
 
         desired_name = config_name or os.path.splitext(os.path.basename(source_path))[0]
         target_name = self._allocate_user_config_name(
@@ -157,6 +159,19 @@ class ConfigManager:
         )
         return f"{config_data['name']} ({source_label})"
 
+    def _ensure_unique_user_preset_name(self, preset_name):
+        normalized_name = self._normalize_preset_name(preset_name)
+        for entry in self.get_config_entries():
+            if entry["type"] != CONFIG_SOURCE_USER:
+                continue
+            config = self._load_config_from_path(entry["path"])
+            if config and self._normalize_preset_name(config["name"]) == normalized_name:
+                raise ValueError(
+                    self._translate("A user preset named '{name}' already exists").format(
+                        name=preset_name,
+                    )
+                )
+
     @staticmethod
     def _ensure_json_suffix(file_name):
         if file_name.endswith(".json"):
@@ -170,6 +185,10 @@ class ConfigManager:
         normalized = re.sub(r"[^0-9a-zA-Z_.-]+", "_", normalized)
         normalized = normalized.strip("._-")
         return normalized or "custom_lip_sync"
+
+    @staticmethod
+    def _normalize_preset_name(preset_name):
+        return preset_name.strip()
 
     @staticmethod
     def _allocate_user_config_name(target_dir, desired_name):
