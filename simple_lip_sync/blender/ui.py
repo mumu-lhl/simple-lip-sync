@@ -1,7 +1,7 @@
 """Blender UI and operators."""
 
 import os
-import subprocess
+import subprocess  # nosec B404
 import sys
 
 import bpy
@@ -658,7 +658,7 @@ def _open_path_non_blocking(path):
         return
 
     command = ["open", path] if sys.platform == "darwin" else ["xdg-open", path]
-    subprocess.Popen(
+    subprocess.Popen(  # nosec B603
         command,
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,

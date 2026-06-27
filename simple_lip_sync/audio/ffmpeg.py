@@ -3,7 +3,7 @@
 import os
 import platform
 import shutil
-import subprocess
+import subprocess  # nosec B404
 import tempfile
 from pathlib import Path
 
@@ -52,7 +52,12 @@ def convert_to_wav_16000(audio_path):
     ]
 
     try:
-        subprocess.run(command, check=True, timeout=1800, capture_output=True)
+        subprocess.run(  # nosec B603
+            command,
+            check=True,
+            timeout=1800,
+            capture_output=True,
+        )
     except subprocess.CalledProcessError as exc:
         stderr = exc.stderr.decode(errors="replace") if exc.stderr else ""
         raise RuntimeError(f"FFmpeg failed: {stderr}") from exc
@@ -73,7 +78,7 @@ def find_ffmpeg():
         if os.path.isfile(candidate):
             if platform.system() != "Windows" and not os.access(candidate, os.X_OK):
                 try:
-                    os.chmod(candidate, 0o755)
+                    os.chmod(candidate, 0o755)  # nosec B103
                 except OSError as exc:
                     raise PermissionError(
                         f"Failed to make FFmpeg executable at {candidate}"
@@ -81,4 +86,3 @@ def find_ffmpeg():
             return candidate
 
     return shutil.which("ffmpeg")
-
