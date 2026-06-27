@@ -20,6 +20,22 @@
 
 每次修改参数后，需要重新点击 `Generate Lip Sync` 生成动画，才能看到新效果。
 
+## 保存和复用调参预设
+
+如果你调出了一组常用参数，可以在 `Advanced` 面板里点击 `Save Tuning Preset` 保存。保存时会弹出命名窗口，输入一个容易识别的名字即可。
+
+以后想复用这组参数时：
+
+1. 打开 `Advanced`。
+2. 勾选 `Custom Tuning`。
+3. 在 `Tuning Preset` 下拉框里选择保存过的调参预设。
+4. 点击旁边的应用按钮。
+5. 再点击 `Generate Lip Sync` 重新生成口型动画。
+
+调参预设只保存高级参数，例如 `Delayed Opening`、`Opening Speed`、阈值和最大形态键值。它不会保存 A/I/U/E/O/N 对应的 shape key。shape key 映射仍然由 `Presets` 面板里的口型同步预设管理。
+
+如果某个调参预设不再需要，可以在 `Tuning Preset` 下拉框里选中它，然后点击删除按钮。删除前会弹出确认窗口。
+
 ## 口型动得太快时怎么调
 
 优先按这个顺序调：

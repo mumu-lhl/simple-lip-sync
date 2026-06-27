@@ -8,15 +8,19 @@ from ..audio.lips import Lips
 from ..core.config_manager import ConfigManager
 from ..core.profiles import get_lip_sync_preset_values
 from ..core.schema import CANONICAL_LIP_SYNC_KEYS
+from ..core.tuning_presets import TuningPresetManager
 from .i18n import translate as _
 
 _CONFIG_MANAGER = None
+_TUNING_PRESET_MANAGER = None
 _TIMELINE_AUDIO_ENUM_ITEMS = []
 _LIP_SYNC_CONFIG_ENUM_ITEMS = []
 _USER_LIP_SYNC_CONFIG_ENUM_ITEMS = []
+_USER_TUNING_PRESET_ENUM_ITEMS = []
 NO_TIMELINE_AUDIO_ID = "__none_audio__"
 NO_LIP_SYNC_CONFIG_ID = "__none_lip_sync_preset__"
 NO_USER_LIP_SYNC_CONFIG_ID = "__none_user_lip_sync_preset__"
+NO_USER_TUNING_PRESET_ID = "__none_tuning_preset__"
 
 
 def get_config_manager():
@@ -27,6 +31,15 @@ def get_config_manager():
         user_scripts_dir = bpy.utils.user_resource("SCRIPTS")
         _CONFIG_MANAGER = ConfigManager(addon_dir, user_scripts_dir, translate_func=_)
     return _CONFIG_MANAGER
+
+
+def get_tuning_preset_manager():
+    """Return the add-on tuning preset manager."""
+    global _TUNING_PRESET_MANAGER
+    if _TUNING_PRESET_MANAGER is None:
+        user_scripts_dir = bpy.utils.user_resource("SCRIPTS")
+        _TUNING_PRESET_MANAGER = TuningPresetManager(user_scripts_dir, translate_func=_)
+    return _TUNING_PRESET_MANAGER
 
 
 def get_timeline_audio_items(_self, context):
@@ -95,6 +108,37 @@ def get_user_lip_sync_config_items(_self, _context):
         (NO_USER_LIP_SYNC_CONFIG_ID, _("None"), _("No user presets found")),
     ]
     return _USER_LIP_SYNC_CONFIG_ENUM_ITEMS
+
+
+def get_user_tuning_preset_items(_self, _context):
+    """Build enum items for user-managed tuning presets."""
+    global _USER_TUNING_PRESET_ENUM_ITEMS
+
+    entries = get_user_tuning_preset_entries()
+    items = [
+        (entry["id"], entry["display_name"], entry["description"])
+        for entry in entries
+    ]
+    _USER_TUNING_PRESET_ENUM_ITEMS = items if items else [
+        (NO_USER_TUNING_PRESET_ID, _("None"), _("No tuning presets found")),
+    ]
+    return _USER_TUNING_PRESET_ENUM_ITEMS
+
+
+def get_user_tuning_preset_entries():
+    """Return user tuning preset entries, tolerating unavailable preset storage."""
+    try:
+        return get_tuning_preset_manager().get_preset_entries()
+    except OSError:
+        return []
+
+
+def resolve_tuning_preset_entry(selection):
+    """Resolve a user tuning preset entry, tolerating unavailable preset storage."""
+    try:
+        return get_tuning_preset_manager().resolve_preset_entry(selection)
+    except OSError:
+        return None
 
 
 def generate_lip_sync(context):

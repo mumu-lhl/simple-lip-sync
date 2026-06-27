@@ -16,9 +16,14 @@ from .service import (
     get_config_manager,
     get_lip_sync_config_items,
     get_timeline_audio_items,
+    get_tuning_preset_manager,
+    get_user_tuning_preset_entries,
     get_user_lip_sync_config_items,
+    get_user_tuning_preset_items,
     NO_LIP_SYNC_CONFIG_ID,
     NO_USER_LIP_SYNC_CONFIG_ID,
+    NO_USER_TUNING_PRESET_ID,
+    resolve_tuning_preset_entry,
 )
 
 DEFAULT_ADJUSTMENT_RULES = {
@@ -103,12 +108,27 @@ class SIMPLE_LIP_SYNC_PT_tuning(bpy.types.Panel):
             layout.label(text=_("Using generation preset"), icon="INFO")
             return
 
+        selected_entry = resolve_tuning_preset_entry(scene.sls_tuning_preset_selection)
+        row = layout.row(align=True)
+        row.prop(scene, "sls_tuning_preset_selection", text=_("Tuning Preset"))
+        apply_row = row.row(align=True)
+        apply_row.enabled = selected_entry is not None
+        apply_row.operator("simple_lip_sync.apply_tuning_preset", text="", icon="FILE_TICK")
+        delete_row = row.row(align=True)
+        delete_row.enabled = selected_entry is not None
+        delete_row.operator("simple_lip_sync.delete_tuning_preset", text="", icon="TRASH")
+
         layout.prop(scene, "sls_db_threshold")
         layout.prop(scene, "sls_rms_threshold")
         layout.prop(scene, "sls_buffer")
         layout.prop(scene, "sls_approach_speed")
         layout.prop(scene, "sls_max_morph_value")
         layout.prop(scene, "sls_anticipation_scale")
+        layout.operator(
+            "simple_lip_sync.create_tuning_preset",
+            text=_("Save Tuning Preset"),
+            icon="ADD",
+        )
 
 
 class SIMPLE_LIP_SYNC_PT_presets(bpy.types.Panel):
@@ -310,6 +330,115 @@ class SIMPLE_LIP_SYNC_OT_delete_preset(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class SIMPLE_LIP_SYNC_OT_create_tuning_preset(bpy.types.Operator):
+    """Create a user tuning preset."""
+
+    bl_idname = "simple_lip_sync.create_tuning_preset"
+    bl_label = "Save Tuning Preset"
+    bl_description = "Save current advanced tuning values as a reusable preset"
+
+    preset_name: bpy.props.StringProperty(
+        name="Tuning Preset Name",
+        default="Custom Tuning",
+        maxlen=128,
+    )
+
+    def invoke(self, context, _event):
+        self.preset_name = context.scene.sls_create_tuning_preset_name or "Custom Tuning"
+        return context.window_manager.invoke_props_dialog(self)
+
+    def draw(self, _context):
+        self.layout.prop(self, "preset_name", text=_("Name"))
+
+    def execute(self, context):
+        scene = context.scene
+        try:
+            entry = get_tuning_preset_manager().save_preset_from_display_name(
+                self.preset_name,
+                _current_tuning_values(scene),
+            )
+        except Exception as exc:
+            self.report({"ERROR"}, str(exc))
+            return {"CANCELLED"}
+
+        _refresh_tuning_preset_ui(context)
+        if entry:
+            scene.sls_tuning_preset_selection = entry["id"]
+        scene.sls_create_tuning_preset_name = self.preset_name
+        _tag_ui_redraw(context)
+        self.report({"INFO"}, _("Saved tuning preset"))
+        return {"FINISHED"}
+
+
+class SIMPLE_LIP_SYNC_OT_apply_tuning_preset(bpy.types.Operator):
+    """Apply the selected user tuning preset."""
+
+    bl_idname = "simple_lip_sync.apply_tuning_preset"
+    bl_label = "Apply Tuning Preset"
+    bl_description = "Apply the selected tuning preset to the advanced values"
+
+    def execute(self, context):
+        scene = context.scene
+        try:
+            preset = get_tuning_preset_manager().load_preset(scene.sls_tuning_preset_selection)
+        except Exception as exc:
+            self.report({"ERROR"}, str(exc))
+            return {"CANCELLED"}
+        if preset is None:
+            self.report({"ERROR"}, _("Please select a tuning preset"))
+            return {"CANCELLED"}
+
+        _set_tuning_values(scene, preset["values"])
+        scene.sls_use_custom_tuning = True
+        _tag_ui_redraw(context)
+        self.report({"INFO"}, _("Applied tuning preset: {name}").format(name=preset["name"]))
+        return {"FINISHED"}
+
+
+class SIMPLE_LIP_SYNC_OT_delete_tuning_preset(bpy.types.Operator):
+    """Delete the selected user tuning preset."""
+
+    bl_idname = "simple_lip_sync.delete_tuning_preset"
+    bl_label = "Delete Tuning Preset"
+    bl_description = "Delete the selected tuning preset"
+
+    def invoke(self, context, event):
+        entry = resolve_tuning_preset_entry(context.scene.sls_tuning_preset_selection)
+        if entry is None:
+            self.report({"ERROR"}, _("Please select a tuning preset"))
+            return {"CANCELLED"}
+        return context.window_manager.invoke_confirm(
+            self,
+            event,
+            title=_("Delete Tuning Preset"),
+            message=_("Delete the selected tuning preset?"),
+            confirm_text=_("Delete"),
+            icon="ERROR",
+        )
+
+    def execute(self, context):
+        scene = context.scene
+        try:
+            deleted_entry = get_tuning_preset_manager().delete_preset(
+                scene.sls_tuning_preset_selection
+            )
+        except Exception as exc:
+            self.report({"ERROR"}, str(exc))
+            return {"CANCELLED"}
+
+        _refresh_tuning_preset_ui(context)
+        entries = get_user_tuning_preset_entries()
+        scene.sls_tuning_preset_selection = (
+            entries[0]["id"] if entries else NO_USER_TUNING_PRESET_ID
+        )
+        _tag_ui_redraw(context)
+        self.report(
+            {"INFO"},
+            _("Deleted tuning preset: {name}").format(name=deleted_entry["display_name"]),
+        )
+        return {"FINISHED"}
+
+
 class SIMPLE_LIP_SYNC_OT_import_preset(bpy.types.Operator, ImportHelper):
     """Import a lip sync preset."""
 
@@ -477,6 +606,26 @@ def _set_mapping(scene, mapping):
     scene.sls_shape_key_n = mapping["n"]
 
 
+def _current_tuning_values(scene):
+    return {
+        "buffer": scene.sls_buffer,
+        "approach_speed": scene.sls_approach_speed,
+        "db_threshold": scene.sls_db_threshold,
+        "rms_threshold": scene.sls_rms_threshold,
+        "max_morph_value": scene.sls_max_morph_value,
+        "anticipation_scale": scene.sls_anticipation_scale,
+    }
+
+
+def _set_tuning_values(scene, values):
+    scene.sls_buffer = values["buffer"]
+    scene.sls_approach_speed = values["approach_speed"]
+    scene.sls_db_threshold = values["db_threshold"]
+    scene.sls_rms_threshold = values["rms_threshold"]
+    scene.sls_max_morph_value = values["max_morph_value"]
+    scene.sls_anticipation_scale = values["anticipation_scale"]
+
+
 def _ensure_json_suffix(file_name):
     return file_name if file_name.endswith(".json") else f"{file_name}.json"
 
@@ -484,6 +633,10 @@ def _ensure_json_suffix(file_name):
 def _refresh_preset_ui(context):
     get_lip_sync_config_items(None, context)
     get_user_lip_sync_config_items(None, context)
+
+
+def _refresh_tuning_preset_ui(context):
+    get_user_tuning_preset_items(None, context)
 
 
 def _tag_ui_redraw(context):
@@ -521,6 +674,9 @@ CLASSES = (
     SIMPLE_LIP_SYNC_OT_generate,
     SIMPLE_LIP_SYNC_OT_create_preset,
     SIMPLE_LIP_SYNC_OT_delete_preset,
+    SIMPLE_LIP_SYNC_OT_create_tuning_preset,
+    SIMPLE_LIP_SYNC_OT_apply_tuning_preset,
+    SIMPLE_LIP_SYNC_OT_delete_tuning_preset,
     SIMPLE_LIP_SYNC_OT_import_preset,
     SIMPLE_LIP_SYNC_OT_export_preset,
     SIMPLE_LIP_SYNC_OT_open_config_folder,
@@ -536,6 +692,7 @@ SCENE_PROPS = (
     "sls_start_frame",
     "sls_generation_preset",
     "sls_use_custom_tuning",
+    "sls_tuning_preset_selection",
     "sls_buffer",
     "sls_approach_speed",
     "sls_db_threshold",
@@ -545,6 +702,7 @@ SCENE_PROPS = (
     "sls_config_selection",
     "sls_user_config_selection",
     "sls_create_config_name",
+    "sls_create_tuning_preset_name",
     "sls_shape_key_a",
     "sls_shape_key_i",
     "sls_shape_key_u",
@@ -615,6 +773,11 @@ def register_scene_properties():
         description="Use manual tuning instead of the selected motion preset",
         default=False,
     )
+    bpy.types.Scene.sls_tuning_preset_selection = bpy.props.EnumProperty(
+        name="Tuning Preset",
+        description="Select a saved tuning preset to apply or delete",
+        items=get_user_tuning_preset_items,
+    )
     bpy.types.Scene.sls_buffer = bpy.props.FloatProperty(
         name="Delayed Opening",
         default=defaults["buffer"],
@@ -664,6 +827,11 @@ def register_scene_properties():
     bpy.types.Scene.sls_create_config_name = bpy.props.StringProperty(
         name="Preset Name",
         default="Custom Lip Sync",
+        maxlen=128,
+    )
+    bpy.types.Scene.sls_create_tuning_preset_name = bpy.props.StringProperty(
+        name="Tuning Preset Name",
+        default="Custom Tuning",
         maxlen=128,
     )
     bpy.types.Scene.sls_shape_key_a = bpy.props.StringProperty(name="A", default="あ")
