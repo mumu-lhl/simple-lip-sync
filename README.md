@@ -1,5 +1,7 @@
 # Simple Lip Sync
 
+[中文](README_zh.md)
+
 [![Ruff](https://img.shields.io/github/check-runs/mumu-lhl/simple-lip-sync/main?nameFilter=Ruff&label=ruff&logo=github&style=flat-square)](https://github.com/mumu-lhl/simple-lip-sync/actions/workflows/ci.yml)
 [![Tests](https://img.shields.io/github/check-runs/mumu-lhl/simple-lip-sync/main?nameFilter=Python%20tests&label=tests&logo=github&style=flat-square)](https://github.com/mumu-lhl/simple-lip-sync/actions/workflows/ci.yml)
 [![Bandit](https://img.shields.io/github/check-runs/mumu-lhl/simple-lip-sync/main?nameFilter=Bandit&label=bandit&logo=github&style=flat-square)](https://github.com/mumu-lhl/simple-lip-sync/actions/workflows/ci.yml)
