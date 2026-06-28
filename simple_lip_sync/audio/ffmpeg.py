@@ -1,5 +1,6 @@
 """FFmpeg discovery and audio conversion."""
 
+import hashlib
 import os
 import platform
 import shutil
@@ -8,12 +9,31 @@ import tempfile
 from pathlib import Path
 
 
+_WAV_CACHE = {}
+_CACHE_DIR = os.path.join(tempfile.gettempdir(), "simple_lip_sync")
+
+
+def _get_cache_key(audio_path):
+    abs_path = os.path.abspath(audio_path)
+    stat = os.stat(abs_path)
+    raw_key = f"{abs_path}|{stat.st_size}|{stat.st_mtime_ns}"
+    return hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
+
+
+def _ensure_cache_dir():
+    os.makedirs(_CACHE_DIR, exist_ok=True)
+
+
 def convert_to_wav_16000(audio_path):
-    """Convert an audio file to a temporary 16 kHz mono PCM WAV.
+    """Convert an audio file to a cached 16 kHz mono PCM WAV.
 
     If FFmpeg is unavailable and the input is already a WAV file, the original
-    path is returned. The caller must only delete the result when ``is_temp`` is
-    true.
+    path is returned. Otherwise the result is cached in the system temporary
+    directory and returned with ``is_temp=False``.
+
+    The cache key is derived from the absolute path, file size and modification
+    timestamp, so replacing the source file automatically produces a fresh cache
+    entry on the next call.
     """
     if not os.path.isfile(audio_path):
         raise FileNotFoundError(f"Input file does not exist: {audio_path}")
@@ -27,9 +47,18 @@ def convert_to_wav_16000(audio_path):
             "under simple_lip_sync/audio/lib."
         )
 
-    base_name = Path(audio_path).stem
-    fd, output_path = tempfile.mkstemp(prefix=f"{base_name}_sls16khz_", suffix=".wav")
-    os.close(fd)
+    cache_key = _get_cache_key(audio_path)
+
+    cached_path = _WAV_CACHE.get(cache_key)
+    if cached_path and os.path.isfile(cached_path):
+        return cached_path, False
+
+    _ensure_cache_dir()
+    output_path = os.path.join(_CACHE_DIR, f"sls16khz_{cache_key}.wav")
+
+    if os.path.isfile(output_path):
+        _WAV_CACHE[cache_key] = output_path
+        return output_path, False
 
     command = [
         ffmpeg_path,
@@ -62,7 +91,21 @@ def convert_to_wav_16000(audio_path):
         stderr = exc.stderr.decode(errors="replace") if exc.stderr else ""
         raise RuntimeError(f"FFmpeg failed: {stderr}") from exc
 
-    return output_path, True
+    _WAV_CACHE[cache_key] = output_path
+    return output_path, False
+
+
+def clear_wav_cache():
+    """Remove all cached WAV files and clear the in-memory index."""
+    global _WAV_CACHE
+    _WAV_CACHE = {}
+    if os.path.isdir(_CACHE_DIR):
+        for entry in os.listdir(_CACHE_DIR):
+            if entry.startswith("sls16khz_") and entry.endswith(".wav"):
+                try:
+                    os.remove(os.path.join(_CACHE_DIR, entry))
+                except OSError:
+                    pass
 
 
 def find_ffmpeg():

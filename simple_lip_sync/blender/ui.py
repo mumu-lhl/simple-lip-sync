@@ -7,6 +7,7 @@ import sys
 import bpy
 from bpy_extras.io_utils import ExportHelper, ImportHelper
 
+from ..audio.ffmpeg import clear_wav_cache
 from ..core.config_manager import CONFIG_SOURCE_USER
 from ..core.profiles import DEFAULT_LIP_SYNC_PRESET, get_lip_sync_preset_values
 from .i18n import translate as _
@@ -85,6 +86,7 @@ class SIMPLE_LIP_SYNC_PT_main(bpy.types.Panel):
         layout.prop(scene, "sls_generation_preset")
         layout.prop(scene, "sls_config_selection", text=_("Preset"))
         layout.operator("simple_lip_sync.generate", text=_("Generate Lip Sync"), icon="SOUND")
+        layout.operator("simple_lip_sync.clear_audio_cache", text=_("Clear Audio Cache"), icon="TRASH")
 
 
 class SIMPLE_LIP_SYNC_PT_tuning(bpy.types.Panel):
@@ -667,6 +669,19 @@ def _open_path_non_blocking(path):
     )
 
 
+class SIMPLE_LIP_SYNC_OT_clear_audio_cache(bpy.types.Operator):
+    """Clear the cached converted audio files."""
+
+    bl_idname = "simple_lip_sync.clear_audio_cache"
+    bl_label = "Clear Audio Cache"
+    bl_description = "Clear cached converted WAV files to force re-conversion on next generation"
+
+    def execute(self, context):
+        clear_wav_cache()
+        self.report({"INFO"}, _("Cleared audio cache"))
+        return {"FINISHED"}
+
+
 CLASSES = (
     SIMPLE_LIP_SYNC_PT_main,
     SIMPLE_LIP_SYNC_PT_presets,
@@ -683,6 +698,7 @@ CLASSES = (
     SIMPLE_LIP_SYNC_OT_autofill_mmd,
     SIMPLE_LIP_SYNC_OT_autofill_vrm,
     SIMPLE_LIP_SYNC_OT_autofill_selected,
+    SIMPLE_LIP_SYNC_OT_clear_audio_cache,
 )
 
 SCENE_PROPS = (
