@@ -145,35 +145,33 @@ def generate_lip_sync(context):
     """Generate lip sync shape-key keyframes for selected meshes."""
     scene = context.scene
     fps = scene.render.fps
-    start_frame = scene.sls_start_frame
 
-    if scene.sls_audio_source == "timeline":
-        strip = find_timeline_audio_strip(scene)
-        if strip is not None:
-            start_frame = int(strip.frame_final_start)
-
-    wav_path = resolve_audio_path(scene)
+    audio_inputs = resolve_audio_inputs(scene)
     config = get_config_manager().load_config(scene.sls_config_selection)
     if not config:
         raise ValueError(_("Please select a valid lip sync preset"))
 
     tuning = resolve_tuning(scene)
-    lips = Lips.mmd_lips_gen(
-        wav_path=wav_path,
-        buffer=tuning["buffer"],
-        approach_speed=tuning["approach_speed"],
-        db_threshold=tuning["db_threshold"],
-        rms_threshold=tuning["rms_threshold"],
-        max_morph_value=tuning["max_morph_value"],
-        start_frame=start_frame,
-        fps=fps,
-        anticipation_scale=tuning["anticipation_scale"],
-    )
-
     meshes = find_meshes_with_config(context, config)
-    for mesh in meshes:
-        set_lips_to_mesh_with_config(mesh, lips, start_frame, config)
-    return {"mesh_count": len(meshes), "lips": lips, "config": config}
+
+    for audio_input in audio_inputs:
+        lips = Lips.mmd_lips_gen(
+            wav_path=audio_input["path"],
+            buffer=tuning["buffer"],
+            approach_speed=tuning["approach_speed"],
+            db_threshold=tuning["db_threshold"],
+            rms_threshold=tuning["rms_threshold"],
+            max_morph_value=tuning["max_morph_value"],
+            start_frame=audio_input["start_frame"],
+            fps=fps,
+            anticipation_scale=tuning["anticipation_scale"],
+            seek_seconds=audio_input["seek_seconds"],
+            duration_seconds=audio_input["duration_seconds"],
+        )
+        for mesh in meshes:
+            set_lips_to_mesh_with_config(mesh, lips, audio_input["start_frame"], config)
+
+    return {"mesh_count": len(meshes)}
 
 
 def find_timeline_audio_strip(scene):
@@ -199,6 +197,51 @@ def _iter_sequence_editor_strips(sequence_editor):
     return []
 
 
+def resolve_strip_audio_path(strip):
+    """Extract the absolute audio filepath from a VSE strip."""
+    if strip.type == "SOUND":
+        filepath = getattr(strip.sound, "filepath", None)
+    elif strip.type == "MOVIE":
+        filepath = getattr(getattr(strip, "sound", None), "filepath", None)
+    else:
+        filepath = None
+    if not filepath:
+        return None
+    return bpy.path.abspath(filepath)
+
+
+def find_timeline_audio_strips_by_channel(scene, channel):
+    """Find all SOUND/MOVIE strips with a valid audio file on a given channel."""
+    se = scene.sequence_editor
+    if not se:
+        return []
+
+    strips = []
+    for strip in _iter_sequence_editor_strips(se):
+        if strip.channel != channel:
+            continue
+        if strip.type not in {"SOUND", "MOVIE"}:
+            continue
+        if resolve_strip_audio_path(strip):
+            strips.append(strip)
+
+    return sorted(strips, key=lambda strip: strip.frame_final_start)
+
+
+def get_timeline_strips_by_channel(scene, channel):
+    """Lightweight strip query for UI display (no filepath resolution)."""
+    se = scene.sequence_editor
+    if not se:
+        return []
+
+    strips = []
+    for strip in _iter_sequence_editor_strips(se):
+        if strip.channel == channel and strip.type in {"SOUND", "MOVIE"}:
+            strips.append(strip)
+
+    return sorted(strips, key=lambda strip: strip.frame_final_start)
+
+
 def resolve_audio_path(scene):
     """Resolve audio file path from file or timeline settings."""
     if scene.sls_audio_source == "file":
@@ -211,16 +254,82 @@ def resolve_audio_path(scene):
     if strip is None:
         raise ValueError(_("No timeline audio strip selected"))
 
-    filepath = None
-    if strip.type == "SOUND":
-        filepath = getattr(strip.sound, "filepath", None)
-    elif strip.type == "MOVIE":
-        filepath = getattr(getattr(strip, "sound", None), "filepath", None)
+    filepath = resolve_strip_audio_path(strip)
     if not filepath:
         raise ValueError(
             _("Selected strip '{name}' has no valid audio filepath").format(name=strip.name)
         )
-    return bpy.path.abspath(filepath)
+    return filepath
+
+
+def _strip_seek_duration(strip, fps):
+    """Convert a strip's frame-offset properties to seconds for audio trimming."""
+    if fps <= 0:
+        fps = 24
+    return {
+        "seek_seconds": strip.frame_offset_start / fps,
+        "duration_seconds": strip.frame_final_duration / fps,
+    }
+
+
+def resolve_audio_inputs(scene):
+    """Resolve a list of audio inputs based on the audio source setting.
+
+    Returns a list of dicts, each with:
+        "path"             – absolute audio filepath
+        "start_frame"      – frame at which generation should begin
+        "strip"            – the VSE strip (or None for file source)
+        "seek_seconds"     – seconds to skip from the beginning of the audio
+        "duration_seconds" – seconds of audio to keep (0 = whole file)
+    """
+    if scene.sls_audio_source == "file":
+        path = scene.sls_audio_path
+        if not path:
+            raise ValueError(_("No audio file path specified"))
+        return [{
+            "path": bpy.path.abspath(path),
+            "start_frame": scene.sls_start_frame,
+            "strip": None,
+            "seek_seconds": 0.0,
+            "duration_seconds": 0.0,
+        }]
+
+    if scene.sls_audio_source == "timeline":
+        strip = find_timeline_audio_strip(scene)
+        if strip is None:
+            raise ValueError(_("No timeline audio strip selected"))
+        path = resolve_strip_audio_path(strip)
+        if not path:
+            raise ValueError(
+                _("Selected strip '{name}' has no valid audio filepath").format(name=strip.name)
+            )
+        sd = _strip_seek_duration(strip, scene.render.fps)
+        return [{
+            "path": path,
+            "start_frame": int(strip.frame_final_start),
+            "strip": strip,
+            **sd,
+        }]
+
+    if scene.sls_audio_source == "channel":
+        channel = scene.sls_timeline_audio_channel
+        strips = find_timeline_audio_strips_by_channel(scene, channel)
+        if not strips:
+            raise ValueError(
+                _("No audio strips found on channel {channel}").format(channel=channel)
+            )
+        fps = scene.render.fps
+        return [
+            {
+                "path": resolve_strip_audio_path(strip),
+                "start_frame": int(strip.frame_final_start),
+                "strip": strip,
+                **_strip_seek_duration(strip, fps),
+            }
+            for strip in strips
+        ]
+
+    raise ValueError(_("Unknown audio source: {source}").format(source=scene.sls_audio_source))
 
 
 def resolve_tuning(scene):

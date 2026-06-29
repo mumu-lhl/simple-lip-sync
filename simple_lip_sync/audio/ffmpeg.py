@@ -13,10 +13,12 @@ _WAV_CACHE = {}
 _CACHE_DIR = os.path.join(tempfile.gettempdir(), "simple_lip_sync")
 
 
-def _get_cache_key(audio_path):
+def _get_cache_key(audio_path, seek_seconds=0.0, duration_seconds=0.0):
     abs_path = os.path.abspath(audio_path)
     stat = os.stat(abs_path)
     raw_key = f"{abs_path}|{stat.st_size}|{stat.st_mtime_ns}"
+    if seek_seconds or duration_seconds:
+        raw_key += f"|{seek_seconds:.4f}|{duration_seconds:.4f}"
     return hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
 
 
@@ -24,7 +26,7 @@ def _ensure_cache_dir():
     os.makedirs(_CACHE_DIR, exist_ok=True)
 
 
-def convert_to_wav_16000(audio_path):
+def convert_to_wav_16000(audio_path, seek_seconds=0.0, duration_seconds=0.0):
     """Convert an audio file to a cached 16 kHz mono PCM WAV.
 
     If FFmpeg is unavailable and the input is already a WAV file, the original
@@ -34,12 +36,20 @@ def convert_to_wav_16000(audio_path):
     The cache key is derived from the absolute path, file size and modification
     timestamp, so replacing the source file automatically produces a fresh cache
     entry on the next call.
+
+    When *seek_seconds* is non-zero, the audio is skipped forward by that many
+    seconds before conversion.  When *duration_seconds* is non-zero, only that
+    many seconds of audio are kept.  Both values are included in the cache key.
     """
     if not os.path.isfile(audio_path):
         raise FileNotFoundError(f"Input file does not exist: {audio_path}")
 
     ffmpeg_path = find_ffmpeg()
     if not ffmpeg_path:
+        if seek_seconds > 0 or duration_seconds > 0:
+            raise FileNotFoundError(
+                "FFmpeg is required for audio trimming but was not found."
+            )
         if Path(audio_path).suffix.lower() == ".wav":
             return audio_path, False
         raise FileNotFoundError(
@@ -47,7 +57,7 @@ def convert_to_wav_16000(audio_path):
             "under simple_lip_sync/audio/lib."
         )
 
-    cache_key = _get_cache_key(audio_path)
+    cache_key = _get_cache_key(audio_path, seek_seconds, duration_seconds)
 
     cached_path = _WAV_CACHE.get(cache_key)
     if cached_path and os.path.isfile(cached_path):
@@ -60,8 +70,10 @@ def convert_to_wav_16000(audio_path):
         _WAV_CACHE[cache_key] = output_path
         return output_path, False
 
-    command = [
-        ffmpeg_path,
+    command = [ffmpeg_path]
+    if seek_seconds > 0:
+        command.extend(["-ss", str(seek_seconds)])
+    command.extend([
         "-i",
         audio_path,
         "-max_muxing_queue_size",
@@ -76,9 +88,10 @@ def convert_to_wav_16000(audio_path):
         "1",
         "-sample_fmt",
         "s16",
-        "-y",
-        output_path,
-    ]
+    ])
+    if duration_seconds > 0:
+        command.extend(["-t", str(duration_seconds)])
+    command.extend(["-y", output_path])
 
     try:
         subprocess.run(  # nosec B603

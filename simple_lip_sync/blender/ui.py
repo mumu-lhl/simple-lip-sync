@@ -14,6 +14,7 @@ from .i18n import translate as _
 from .service import (
     find_timeline_audio_strip,
     generate_lip_sync,
+    get_timeline_strips_by_channel,
     get_config_manager,
     get_lip_sync_config_items,
     get_timeline_audio_items,
@@ -71,7 +72,7 @@ class SIMPLE_LIP_SYNC_PT_main(bpy.types.Panel):
         layout.prop(scene, "sls_audio_source")
         if scene.sls_audio_source == "file":
             layout.prop(scene, "sls_audio_path")
-        else:
+        elif scene.sls_audio_source == "timeline":
             layout.prop(scene, "sls_timeline_audio_strip")
             strip = find_timeline_audio_strip(scene)
             if strip is not None:
@@ -80,6 +81,51 @@ class SIMPLE_LIP_SYNC_PT_main(bpy.types.Panel):
                         frame=int(strip.frame_final_start),
                     ),
                     icon="INFO",
+                )
+        else:
+            layout.prop(scene, "sls_timeline_audio_channel")
+            strips = get_timeline_strips_by_channel(scene, scene.sls_timeline_audio_channel)
+            if strips:
+                row = layout.row(align=True)
+                row.label(
+                    text=_("{count} audio strip(s) found on channel {channel}").format(
+                        count=len(strips),
+                        channel=scene.sls_timeline_audio_channel,
+                    ),
+                    icon="SEQ_SEQUENCER",
+                )
+                MAX_VISIBLE = 10
+                if len(strips) > MAX_VISIBLE:
+                    row.label(
+                        text=_("{count} shown").format(count=MAX_VISIBLE),
+                    )
+                layout.prop(scene, "sls_show_channel_details", text=_("Show Details"))
+                if scene.sls_show_channel_details:
+                    box = layout.box()
+                    for i, strip in enumerate(strips):
+                        if i >= MAX_VISIBLE:
+                            remaining = len(strips) - i
+                            box.label(
+                                text=_("... and {count} more").format(count=remaining),
+                            )
+                            break
+                        row = box.row(align=True)
+                        row.label(
+                            text=strip.name,
+                            icon="SOUND" if strip.type == "SOUND" else "FILE_MOVIE",
+                        )
+                        row.label(
+                            text=_("Frame {frame}").format(frame=int(strip.frame_final_start)),
+                        )
+                        row.label(
+                            text=_("{duration} frames").format(duration=int(strip.frame_final_duration)),
+                        )
+            else:
+                layout.label(
+                    text=_("No audio strips found on channel {channel}").format(
+                        channel=scene.sls_timeline_audio_channel,
+                    ),
+                    icon="ERROR",
                 )
 
         layout.prop(scene, "sls_start_frame")
@@ -704,6 +750,8 @@ CLASSES = (
 SCENE_PROPS = (
     "sls_audio_source",
     "sls_timeline_audio_strip",
+    "sls_timeline_audio_channel",
+    "sls_show_channel_details",
     "sls_audio_path",
     "sls_start_frame",
     "sls_generation_preset",
@@ -754,6 +802,7 @@ def register_scene_properties():
         items=(
             ("file", "File", "Use an audio file from disk"),
             ("timeline", "Timeline", "Use audio from the Video Sequence Editor timeline"),
+            ("channel", "Channel", "Use all audio strips on a sequencer channel"),
         ),
         default="file",
     )
@@ -761,6 +810,17 @@ def register_scene_properties():
         name="Audio Strip",
         description="Select an audio strip from the timeline",
         items=get_timeline_audio_items,
+    )
+    bpy.types.Scene.sls_timeline_audio_channel = bpy.props.IntProperty(
+        name="Audio Channel",
+        description="Sequencer channel to collect audio strips from",
+        default=1,
+        min=1,
+    )
+    bpy.types.Scene.sls_show_channel_details = bpy.props.BoolProperty(
+        name="Show Channel Details",
+        description="Show the list of audio strips detected on the selected channel",
+        default=False,
     )
     bpy.types.Scene.sls_audio_path = bpy.props.StringProperty(
         name="Audio Path",
