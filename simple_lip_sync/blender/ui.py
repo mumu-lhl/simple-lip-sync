@@ -84,7 +84,9 @@ class SIMPLE_LIP_SYNC_PT_main(bpy.types.Panel):
                 )
         else:
             layout.prop(scene, "sls_timeline_audio_channel")
-            strips = get_timeline_strips_by_channel(scene, scene.sls_timeline_audio_channel)
+            strips = get_timeline_strips_by_channel(
+                scene, scene.sls_timeline_audio_channel
+            )
             if strips:
                 row = layout.row(align=True)
                 row.label(
@@ -115,10 +117,14 @@ class SIMPLE_LIP_SYNC_PT_main(bpy.types.Panel):
                             icon="SOUND" if strip.type == "SOUND" else "FILE_MOVIE",
                         )
                         row.label(
-                            text=_("Frame {frame}").format(frame=int(strip.frame_final_start)),
+                            text=_("Frame {frame}").format(
+                                frame=int(strip.frame_final_start)
+                            ),
                         )
                         row.label(
-                            text=_("{duration} frames").format(duration=int(strip.frame_final_duration)),
+                            text=_("{duration} frames").format(
+                                duration=int(strip.frame_final_duration)
+                            ),
                         )
             else:
                 layout.label(
@@ -131,8 +137,14 @@ class SIMPLE_LIP_SYNC_PT_main(bpy.types.Panel):
         layout.prop(scene, "sls_start_frame")
         layout.prop(scene, "sls_generation_preset")
         layout.prop(scene, "sls_config_selection", text=_("Preset"))
-        layout.operator("simple_lip_sync.generate", text=_("Generate Lip Sync"), icon="SOUND")
-        layout.operator("simple_lip_sync.clear_audio_cache", text=_("Clear Audio Cache"), icon="TRASH")
+        layout.operator(
+            "simple_lip_sync.generate", text=_("Generate Lip Sync"), icon="SOUND"
+        )
+        layout.operator(
+            "simple_lip_sync.clear_audio_cache",
+            text=_("Clear Audio Cache"),
+            icon="TRASH",
+        )
 
 
 class SIMPLE_LIP_SYNC_PT_tuning(bpy.types.Panel):
@@ -161,10 +173,14 @@ class SIMPLE_LIP_SYNC_PT_tuning(bpy.types.Panel):
         row.prop(scene, "sls_tuning_preset_selection", text=_("Tuning Preset"))
         apply_row = row.row(align=True)
         apply_row.enabled = selected_entry is not None
-        apply_row.operator("simple_lip_sync.apply_tuning_preset", text="", icon="FILE_TICK")
+        apply_row.operator(
+            "simple_lip_sync.apply_tuning_preset", text="", icon="FILE_TICK"
+        )
         delete_row = row.row(align=True)
         delete_row.enabled = selected_entry is not None
-        delete_row.operator("simple_lip_sync.delete_tuning_preset", text="", icon="TRASH")
+        delete_row.operator(
+            "simple_lip_sync.delete_tuning_preset", text="", icon="TRASH"
+        )
 
         layout.prop(scene, "sls_db_threshold")
         layout.prop(scene, "sls_rms_threshold")
@@ -196,12 +212,16 @@ class SIMPLE_LIP_SYNC_PT_presets(bpy.types.Panel):
         scene = context.scene
 
         config_manager = get_config_manager()
-        selected_entry = config_manager.resolve_config_entry(scene.sls_user_config_selection)
+        selected_entry = config_manager.resolve_config_entry(
+            scene.sls_user_config_selection
+        )
 
         row = layout.row(align=True)
         row.prop(scene, "sls_user_config_selection", text=_("User Preset"))
         delete_row = row.row(align=True)
-        delete_row.enabled = selected_entry is not None and selected_entry["type"] == CONFIG_SOURCE_USER
+        delete_row.enabled = (
+            selected_entry is not None and selected_entry["type"] == CONFIG_SOURCE_USER
+        )
         delete_row.operator(
             "simple_lip_sync.delete_preset",
             text="",
@@ -211,7 +231,9 @@ class SIMPLE_LIP_SYNC_PT_presets(bpy.types.Panel):
         row = layout.row(align=True)
         row.operator("simple_lip_sync.autofill_mmd", text=_("MMD"), icon="PRESET")
         row.operator("simple_lip_sync.autofill_vrm", text=_("VRM"), icon="PRESET")
-        row.operator("simple_lip_sync.autofill_selected", text=_("Selected"), icon="EYEDROPPER")
+        row.operator(
+            "simple_lip_sync.autofill_selected", text=_("Selected"), icon="EYEDROPPER"
+        )
 
         grid = layout.grid_flow(columns=2, align=True)
         grid.prop(scene, "sls_shape_key_a", text="A")
@@ -221,11 +243,19 @@ class SIMPLE_LIP_SYNC_PT_presets(bpy.types.Panel):
         grid.prop(scene, "sls_shape_key_o", text="O")
         grid.prop(scene, "sls_shape_key_n", text="N")
 
-        layout.operator("simple_lip_sync.create_preset", text=_("Create Preset"), icon="ADD")
+        layout.operator(
+            "simple_lip_sync.create_preset", text=_("Create Preset"), icon="ADD"
+        )
 
         layout.separator()
-        layout.operator("simple_lip_sync.import_preset", text=_("Import Preset"), icon="IMPORT")
-        layout.operator("simple_lip_sync.export_preset", text=_("Export Selected Preset"), icon="EXPORT")
+        layout.operator(
+            "simple_lip_sync.import_preset", text=_("Import Preset"), icon="IMPORT"
+        )
+        layout.operator(
+            "simple_lip_sync.export_preset",
+            text=_("Export Selected Preset"),
+            icon="EXPORT",
+        )
         layout.operator(
             "simple_lip_sync.open_config_folder",
             text=_("Open User Preset Folder"),
@@ -308,7 +338,9 @@ class SIMPLE_LIP_SYNC_OT_create_preset(bpy.types.Operator):
             "adjustment_rules": DEFAULT_ADJUSTMENT_RULES,
         }
         try:
-            entry = get_config_manager().save_config_from_display_name(self.preset_name, config)
+            entry = get_config_manager().save_config_from_display_name(
+                self.preset_name, config
+            )
         except Exception as exc:
             self.report({"ERROR"}, str(exc))
             return {"CANCELLED"}
@@ -331,7 +363,9 @@ class SIMPLE_LIP_SYNC_OT_delete_preset(bpy.types.Operator):
     bl_description = "Delete the selected user preset"
 
     def invoke(self, context, event):
-        entry = get_config_manager().resolve_config_entry(context.scene.sls_user_config_selection)
+        entry = get_config_manager().resolve_config_entry(
+            context.scene.sls_user_config_selection
+        )
         if entry is None:
             self.report({"ERROR"}, _("Please select a user preset"))
             return {"CANCELLED"}
@@ -360,8 +394,7 @@ class SIMPLE_LIP_SYNC_OT_delete_preset(bpy.types.Operator):
         _refresh_preset_ui(context)
         all_entries = get_config_manager().get_config_entries()
         user_entries = [
-            entry for entry in all_entries
-            if entry["type"] == CONFIG_SOURCE_USER
+            entry for entry in all_entries if entry["type"] == CONFIG_SOURCE_USER
         ]
         scene.sls_user_config_selection = (
             user_entries[0]["id"] if user_entries else NO_USER_LIP_SYNC_CONFIG_ID
@@ -392,7 +425,9 @@ class SIMPLE_LIP_SYNC_OT_create_tuning_preset(bpy.types.Operator):
     )
 
     def invoke(self, context, _event):
-        self.preset_name = context.scene.sls_create_tuning_preset_name or "Custom Tuning"
+        self.preset_name = (
+            context.scene.sls_create_tuning_preset_name or "Custom Tuning"
+        )
         return context.window_manager.invoke_props_dialog(self)
 
     def draw(self, _context):
@@ -428,7 +463,9 @@ class SIMPLE_LIP_SYNC_OT_apply_tuning_preset(bpy.types.Operator):
     def execute(self, context):
         scene = context.scene
         try:
-            preset = get_tuning_preset_manager().load_preset(scene.sls_tuning_preset_selection)
+            preset = get_tuning_preset_manager().load_preset(
+                scene.sls_tuning_preset_selection
+            )
         except Exception as exc:
             self.report({"ERROR"}, str(exc))
             return {"CANCELLED"}
@@ -439,7 +476,9 @@ class SIMPLE_LIP_SYNC_OT_apply_tuning_preset(bpy.types.Operator):
         _set_tuning_values(scene, preset["values"])
         scene.sls_use_custom_tuning = True
         _tag_ui_redraw(context)
-        self.report({"INFO"}, _("Applied tuning preset: {name}").format(name=preset["name"]))
+        self.report(
+            {"INFO"}, _("Applied tuning preset: {name}").format(name=preset["name"])
+        )
         return {"FINISHED"}
 
 
@@ -482,7 +521,9 @@ class SIMPLE_LIP_SYNC_OT_delete_tuning_preset(bpy.types.Operator):
         _tag_ui_redraw(context)
         self.report(
             {"INFO"},
-            _("Deleted tuning preset: {name}").format(name=deleted_entry["display_name"]),
+            _("Deleted tuning preset: {name}").format(
+                name=deleted_entry["display_name"]
+            ),
         )
         return {"FINISHED"}
 
@@ -632,7 +673,10 @@ class SIMPLE_LIP_SYNC_OT_autofill_selected(bpy.types.Operator):
             "o": ("お", "O", "o"),
             "n": ("ん", "N", "n"),
         }.items():
-            mapping[key] = next((candidate for candidate in candidates if candidate in names), candidates[0])
+            mapping[key] = next(
+                (candidate for candidate in candidates if candidate in names),
+                candidates[0],
+            )
         _set_mapping(context.scene, mapping)
         return {"FINISHED"}
 
@@ -720,7 +764,9 @@ class SIMPLE_LIP_SYNC_OT_clear_audio_cache(bpy.types.Operator):
 
     bl_idname = "simple_lip_sync.clear_audio_cache"
     bl_label = "Clear Audio Cache"
-    bl_description = "Clear cached converted WAV files to force re-conversion on next generation"
+    bl_description = (
+        "Clear cached converted WAV files to force re-conversion on next generation"
+    )
 
     def execute(self, context):
         clear_wav_cache()
@@ -801,7 +847,11 @@ def register_scene_properties():
         description="Where to get the audio for lip sync generation",
         items=(
             ("file", "File", "Use an audio file from disk"),
-            ("timeline", "Timeline", "Use audio from the Video Sequence Editor timeline"),
+            (
+                "timeline",
+                "Timeline",
+                "Use audio from the Video Sequence Editor timeline",
+            ),
             ("channel", "Channel", "Use all audio strips on a sequencer channel"),
         ),
         default="file",

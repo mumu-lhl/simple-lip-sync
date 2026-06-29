@@ -49,12 +49,16 @@ def get_timeline_audio_items(_self, context):
     scene = context.scene
     se = scene.sequence_editor
     if not se:
-        _TIMELINE_AUDIO_ENUM_ITEMS = [(NO_TIMELINE_AUDIO_ID, _("None"), _("No audio strips found"))]
+        _TIMELINE_AUDIO_ENUM_ITEMS = [
+            (NO_TIMELINE_AUDIO_ID, _("None"), _("No audio strips found"))
+        ]
         return _TIMELINE_AUDIO_ENUM_ITEMS
 
     items = []
     seen_ids = set()
-    for strip in sorted(_iter_sequence_editor_strips(se), key=lambda item: item.channel, reverse=True):
+    for strip in sorted(
+        _iter_sequence_editor_strips(se), key=lambda item: item.channel, reverse=True
+    ):
         if strip.type == "SOUND":
             filepath = getattr(strip.sound, "filepath", None)
         elif strip.type == "MOVIE":
@@ -66,14 +70,20 @@ def get_timeline_audio_items(_self, context):
         uid = f"{strip.channel}:{strip.name}"
         if uid not in seen_ids:
             seen_ids.add(uid)
-            items.append((
-                uid,
-                strip.name,
-                _("Channel {channel}").format(channel=strip.channel),
-            ))
-    _TIMELINE_AUDIO_ENUM_ITEMS = items if items else [
-        (NO_TIMELINE_AUDIO_ID, _("None"), _("No audio strips found")),
-    ]
+            items.append(
+                (
+                    uid,
+                    strip.name,
+                    _("Channel {channel}").format(channel=strip.channel),
+                )
+            )
+    _TIMELINE_AUDIO_ENUM_ITEMS = (
+        items
+        if items
+        else [
+            (NO_TIMELINE_AUDIO_ID, _("None"), _("No audio strips found")),
+        ]
+    )
     return _TIMELINE_AUDIO_ENUM_ITEMS
 
 
@@ -83,12 +93,15 @@ def get_lip_sync_config_items(_self, _context):
 
     entries = get_config_manager().get_config_entries()
     items = [
-        (entry["id"], entry["display_name"], entry["description"])
-        for entry in entries
+        (entry["id"], entry["display_name"], entry["description"]) for entry in entries
     ]
-    _LIP_SYNC_CONFIG_ENUM_ITEMS = items if items else [
-        (NO_LIP_SYNC_CONFIG_ID, _("None"), _("No presets found")),
-    ]
+    _LIP_SYNC_CONFIG_ENUM_ITEMS = (
+        items
+        if items
+        else [
+            (NO_LIP_SYNC_CONFIG_ID, _("None"), _("No presets found")),
+        ]
+    )
     return _LIP_SYNC_CONFIG_ENUM_ITEMS
 
 
@@ -97,16 +110,20 @@ def get_user_lip_sync_config_items(_self, _context):
     global _USER_LIP_SYNC_CONFIG_ENUM_ITEMS
 
     entries = [
-        entry for entry in get_config_manager().get_config_entries()
+        entry
+        for entry in get_config_manager().get_config_entries()
         if entry["type"] == "user"
     ]
     items = [
-        (entry["id"], entry["display_name"], entry["description"])
-        for entry in entries
+        (entry["id"], entry["display_name"], entry["description"]) for entry in entries
     ]
-    _USER_LIP_SYNC_CONFIG_ENUM_ITEMS = items if items else [
-        (NO_USER_LIP_SYNC_CONFIG_ID, _("None"), _("No user presets found")),
-    ]
+    _USER_LIP_SYNC_CONFIG_ENUM_ITEMS = (
+        items
+        if items
+        else [
+            (NO_USER_LIP_SYNC_CONFIG_ID, _("None"), _("No user presets found")),
+        ]
+    )
     return _USER_LIP_SYNC_CONFIG_ENUM_ITEMS
 
 
@@ -116,12 +133,15 @@ def get_user_tuning_preset_items(_self, _context):
 
     entries = get_user_tuning_preset_entries()
     items = [
-        (entry["id"], entry["display_name"], entry["description"])
-        for entry in entries
+        (entry["id"], entry["display_name"], entry["description"]) for entry in entries
     ]
-    _USER_TUNING_PRESET_ENUM_ITEMS = items if items else [
-        (NO_USER_TUNING_PRESET_ID, _("None"), _("No tuning presets found")),
-    ]
+    _USER_TUNING_PRESET_ENUM_ITEMS = (
+        items
+        if items
+        else [
+            (NO_USER_TUNING_PRESET_ID, _("None"), _("No tuning presets found")),
+        ]
+    )
     return _USER_TUNING_PRESET_ENUM_ITEMS
 
 
@@ -257,7 +277,9 @@ def resolve_audio_path(scene):
     filepath = resolve_strip_audio_path(strip)
     if not filepath:
         raise ValueError(
-            _("Selected strip '{name}' has no valid audio filepath").format(name=strip.name)
+            _("Selected strip '{name}' has no valid audio filepath").format(
+                name=strip.name
+            )
         )
     return filepath
 
@@ -286,13 +308,15 @@ def resolve_audio_inputs(scene):
         path = scene.sls_audio_path
         if not path:
             raise ValueError(_("No audio file path specified"))
-        return [{
-            "path": bpy.path.abspath(path),
-            "start_frame": scene.sls_start_frame,
-            "strip": None,
-            "seek_seconds": 0.0,
-            "duration_seconds": 0.0,
-        }]
+        return [
+            {
+                "path": bpy.path.abspath(path),
+                "start_frame": scene.sls_start_frame,
+                "strip": None,
+                "seek_seconds": 0.0,
+                "duration_seconds": 0.0,
+            }
+        ]
 
     if scene.sls_audio_source == "timeline":
         strip = find_timeline_audio_strip(scene)
@@ -301,15 +325,19 @@ def resolve_audio_inputs(scene):
         path = resolve_strip_audio_path(strip)
         if not path:
             raise ValueError(
-                _("Selected strip '{name}' has no valid audio filepath").format(name=strip.name)
+                _("Selected strip '{name}' has no valid audio filepath").format(
+                    name=strip.name
+                )
             )
         sd = _strip_seek_duration(strip, scene.render.fps)
-        return [{
-            "path": path,
-            "start_frame": int(strip.frame_final_start),
-            "strip": strip,
-            **sd,
-        }]
+        return [
+            {
+                "path": path,
+                "start_frame": int(strip.frame_final_start),
+                "strip": strip,
+                **sd,
+            }
+        ]
 
     if scene.sls_audio_source == "channel":
         channel = scene.sls_timeline_audio_channel
@@ -329,7 +357,9 @@ def resolve_audio_inputs(scene):
             for strip in strips
         ]
 
-    raise ValueError(_("Unknown audio source: {source}").format(source=scene.sls_audio_source))
+    raise ValueError(
+        _("Unknown audio source: {source}").format(source=scene.sls_audio_source)
+    )
 
 
 def resolve_tuning(scene):
@@ -396,7 +426,8 @@ def set_lips_to_mesh_with_config(mesh, lips, start_frame, config):
 
     existing_morphs = (
         {key.name for key in mesh.data.shape_keys.key_blocks}
-        if mesh.data.shape_keys else set()
+        if mesh.data.shape_keys
+        else set()
     )
 
     for morph_key in target_tracks:
@@ -410,7 +441,8 @@ def set_lips_to_mesh_with_config(mesh, lips, start_frame, config):
             mesh,
             target_morph_key,
             [
-                morph_frame for morph_frame in morph_frames
+                morph_frame
+                for morph_frame in morph_frames
                 if morph_frame["frame"] >= start
             ],
         )
@@ -425,7 +457,9 @@ def build_target_tracks(lips, shape_key_mapping, adjustment_rules):
         adjustment_rule = adjustment_rules.get(source_key, {})
 
         for morph_frame in lips.get(source_key, []):
-            adjusted_value = apply_adjustment_rule(morph_frame["value"], adjustment_rule)
+            adjusted_value = apply_adjustment_rule(
+                morph_frame["value"], adjustment_rule
+            )
             frame = round(float(morph_frame["frame"]), 3)
             frame_key = f"{frame:.3f}"
             existing_frame = target_track.get(frame_key)

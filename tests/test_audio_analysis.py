@@ -25,7 +25,9 @@ class AudioAnalysisTests(unittest.TestCase):
                 wav_file.setframerate(sample_rate)
                 frames = []
                 for index in range(int(sample_rate * duration)):
-                    value = int(12000 * math.sin(2.0 * math.pi * 850.0 * index / sample_rate))
+                    value = int(
+                        12000 * math.sin(2.0 * math.pi * 850.0 * index / sample_rate)
+                    )
                     frames.append(struct.pack("<h", value))
                 wav_file.writeframes(b"".join(frames))
 
@@ -67,7 +69,9 @@ class AudioAnalysisTests(unittest.TestCase):
 
         self.assertEqual(len(python_samples), len(native_samples))
         for python_sample, native_sample in zip(python_samples, native_samples):
-            self.assertAlmostEqual(python_sample["time"], native_sample["time"], places=4)
+            self.assertAlmostEqual(
+                python_sample["time"], native_sample["time"], places=4
+            )
             self.assertAlmostEqual(
                 python_sample["openness"],
                 native_sample["openness"],

@@ -1,2 +1,1 @@
 """Blender integration modules."""
-

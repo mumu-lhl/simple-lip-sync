@@ -50,13 +50,15 @@ class TuningPresetManager:
             preset = self._load_preset_from_path(preset_path)
             if preset is None:
                 continue
-            entries.append({
-                "id": self._build_preset_id(file_name),
-                "name": file_name,
-                "path": preset_path,
-                "display_name": preset["name"],
-                "description": preset.get("description", preset["name"]),
-            })
+            entries.append(
+                {
+                    "id": self._build_preset_id(file_name),
+                    "name": file_name,
+                    "path": preset_path,
+                    "display_name": preset["name"],
+                    "description": preset.get("description", preset["name"]),
+                }
+            )
         return entries
 
     def resolve_preset_entry(self, selection):
@@ -89,13 +91,15 @@ class TuningPresetManager:
             raise ValueError(self._translate("Tuning preset name is empty"))
 
         self._ensure_unique_user_preset_name(preset_name)
-        preset = validate_tuning_preset({
-            "name": preset_name,
-            "description": "User-created Simple Lip Sync tuning preset",
-            "version": "1.0",
-            "type": TUNING_PRESET_TYPE,
-            "values": values,
-        })
+        preset = validate_tuning_preset(
+            {
+                "name": preset_name,
+                "description": "User-created Simple Lip Sync tuning preset",
+                "version": "1.0",
+                "type": TUNING_PRESET_TYPE,
+                "values": values,
+            }
+        )
         file_name = self._allocate_user_preset_name(
             self.user_preset_path,
             self._ensure_json_suffix(self._slugify_file_name(preset_name)),
@@ -129,9 +133,14 @@ class TuningPresetManager:
         normalized_name = self._normalize_preset_name(preset_name)
         for entry in self.get_preset_entries():
             preset = self._load_preset_from_path(entry["path"])
-            if preset and self._normalize_preset_name(preset["name"]) == normalized_name:
+            if (
+                preset
+                and self._normalize_preset_name(preset["name"]) == normalized_name
+            ):
                 raise ValueError(
-                    self._translate("A tuning preset named '{name}' already exists").format(
+                    self._translate(
+                        "A tuning preset named '{name}' already exists"
+                    ).format(
                         name=preset_name,
                     )
                 )
@@ -165,7 +174,9 @@ class TuningPresetManager:
     @staticmethod
     def _ensure_user_preset_root(user_scripts_dir):
         if user_scripts_dir is None:
-            user_scripts_dir = os.path.join(os.path.expanduser("~"), ".config", "blender")
+            user_scripts_dir = os.path.join(
+                os.path.expanduser("~"), ".config", "blender"
+            )
         user_preset_dir = os.path.join(
             user_scripts_dir,
             "presets",
@@ -200,7 +211,9 @@ def validate_tuning_preset(preset_data):
             preset_data.get("description", "Tuning preset"),
             "description",
         ),
-        "version": _require_non_empty_string(preset_data.get("version", "1.0"), "version"),
+        "version": _require_non_empty_string(
+            preset_data.get("version", "1.0"), "version"
+        ),
         "type": TUNING_PRESET_TYPE,
         "values": normalize_tuning_values(preset_data.get("values")),
     }

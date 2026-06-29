@@ -57,14 +57,16 @@ def analyze_samples(samples, sample_rate, db_threshold=-50.0, rms_threshold=0.01
 
     output = []
     for index in range(0, len(raw_values), SAMPLE_WIDTH):
-        output.append({
-            "time": round(float(raw_values[index]), 4),
-            "openness": round(float(raw_values[index + 1]), 4),
-            "weights": {
-                viseme: float(raw_values[index + 2 + viseme_index])
-                for viseme_index, viseme in enumerate(VISEMES)
-            },
-        })
+        output.append(
+            {
+                "time": round(float(raw_values[index]), 4),
+                "openness": round(float(raw_values[index + 1]), 4),
+                "weights": {
+                    viseme: float(raw_values[index + 2 + viseme_index])
+                    for viseme_index, viseme in enumerate(VISEMES)
+                },
+            }
+        )
     return output
 
 

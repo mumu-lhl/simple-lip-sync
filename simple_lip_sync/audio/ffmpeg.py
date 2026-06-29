@@ -73,22 +73,24 @@ def convert_to_wav_16000(audio_path, seek_seconds=0.0, duration_seconds=0.0):
     command = [ffmpeg_path]
     if seek_seconds > 0:
         command.extend(["-ss", str(seek_seconds)])
-    command.extend([
-        "-i",
-        audio_path,
-        "-max_muxing_queue_size",
-        "1024",
-        "-threads",
-        str(os.cpu_count() or 2),
-        "-af",
-        "loudnorm=I=-14:LRA=11:TP=-1.5",
-        "-ar",
-        "16000",
-        "-ac",
-        "1",
-        "-sample_fmt",
-        "s16",
-    ])
+    command.extend(
+        [
+            "-i",
+            audio_path,
+            "-max_muxing_queue_size",
+            "1024",
+            "-threads",
+            str(os.cpu_count() or 2),
+            "-af",
+            "loudnorm=I=-14:LRA=11:TP=-1.5",
+            "-ar",
+            "16000",
+            "-ac",
+            "1",
+            "-sample_fmt",
+            "s16",
+        ]
+    )
     if duration_seconds > 0:
         command.extend(["-t", str(duration_seconds)])
     command.extend(["-y", output_path])

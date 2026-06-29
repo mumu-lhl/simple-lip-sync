@@ -57,7 +57,9 @@ def score_visemes(f1, f2):
     for viseme, prototype in FORMANT_PROTOTYPES.items():
         f1_delta = (f1 - prototype["f1"]) / prototype["spread_f1"]
         f2_delta = (f2 - prototype["f2"]) / prototype["spread_f2"]
-        weights[viseme] = math.exp(-0.5 * ((f1_delta * f1_delta) + (f2_delta * f2_delta)))
+        weights[viseme] = math.exp(
+            -0.5 * ((f1_delta * f1_delta) + (f2_delta * f2_delta))
+        )
 
     if f1 > 750.0:
         weights["a"] *= 1.15
@@ -79,7 +81,9 @@ def score_visemes_from_formant_energy(formant_energy):
     for viseme, prototype in FORMANT_PROTOTYPES.items():
         f1_energy = formant_energy.get(prototype["f1"], 0.0)
         f2_energy = formant_energy.get(prototype["f2"], 0.0)
-        weights[viseme] = math.sqrt(max(0.0, f1_energy)) * math.sqrt(max(0.0, f2_energy))
+        weights[viseme] = math.sqrt(max(0.0, f1_energy)) * math.sqrt(
+            max(0.0, f2_energy)
+        )
 
     weights["a"] *= 1.12
     weights["i"] *= 1.05
@@ -103,22 +107,33 @@ def apply_temporal_smoothing(
         blended = zero_weights()
         for viseme in CANONICAL_VISEMES:
             current = sample["weights"].get(viseme, 0.0)
-            next_one = samples[index + 1]["weights"].get(viseme, 0.0) if index + 1 < len(samples) else 0.0
-            next_two = samples[index + 2]["weights"].get(viseme, 0.0) if index + 2 < len(samples) else 0.0
-            blended[viseme] = current + (next_one * anticipation) + (next_two * anticipation * 0.35)
+            next_one = (
+                samples[index + 1]["weights"].get(viseme, 0.0)
+                if index + 1 < len(samples)
+                else 0.0
+            )
+            next_two = (
+                samples[index + 2]["weights"].get(viseme, 0.0)
+                if index + 2 < len(samples)
+                else 0.0
+            )
+            blended[viseme] = (
+                current + (next_one * anticipation) + (next_two * anticipation * 0.35)
+            )
 
         blended = normalize_weights(blended)
         if contrast != 1.0:
-            blended = normalize_weights({
-                viseme: value ** contrast
-                for viseme, value in blended.items()
-            })
+            blended = normalize_weights(
+                {viseme: value**contrast for viseme, value in blended.items()}
+            )
 
-        anticipated.append({
-            "time": sample["time"],
-            "openness": sample["openness"],
-            "weights": blended,
-        })
+        anticipated.append(
+            {
+                "time": sample["time"],
+                "openness": sample["openness"],
+                "weights": blended,
+            }
+        )
 
     smoothed = []
     state = zero_weights()
@@ -126,7 +141,9 @@ def apply_temporal_smoothing(
     for sample in anticipated:
         target_openness = sample["openness"]
         openness_alpha = 0.55 if target_openness > previous_openness else 0.30
-        openness = previous_openness + ((target_openness - previous_openness) * openness_alpha)
+        openness = previous_openness + (
+            (target_openness - previous_openness) * openness_alpha
+        )
         previous_openness = openness
 
         current_weights = {}
@@ -140,10 +157,12 @@ def apply_temporal_smoothing(
 
         capped_weights = cap_total_weight(current_weights, openness)
         state.update(capped_weights)
-        smoothed.append({
-            "time": sample["time"],
-            "weights": capped_weights,
-        })
+        smoothed.append(
+            {
+                "time": sample["time"],
+                "weights": capped_weights,
+            }
+        )
 
     return smoothed
 
@@ -197,11 +216,15 @@ def build_viseme_keyframes(
         track = []
         for sample in smoothed:
             frame = float(start_frame) + (sample["time"] * float(fps))
-            track.append({
-                "frame": round(frame, 3),
-                "value": round(clamp(sample["weights"].get(viseme, 0.0) * max_morph_value), 4),
-                "frame_type": "sample",
-            })
+            track.append(
+                {
+                    "frame": round(frame, 3),
+                    "value": round(
+                        clamp(sample["weights"].get(viseme, 0.0) * max_morph_value), 4
+                    ),
+                    "frame_type": "sample",
+                }
+            )
         result[viseme] = _simplify_track(track, start_frame)
     return result
 
@@ -211,13 +234,19 @@ def _append_release_tail(samples):
         return []
 
     tail = list(samples)
-    step = 0.05 if len(samples) == 1 else max(0.01, samples[-1]["time"] - samples[-2]["time"])
+    step = (
+        0.05
+        if len(samples) == 1
+        else max(0.01, samples[-1]["time"] - samples[-2]["time"])
+    )
     last_time = samples[-1]["time"]
     for offset in range(1, 4):
-        tail.append({
-            "time": round(last_time + (step * offset), 4),
-            "weights": zero_weights(),
-        })
+        tail.append(
+            {
+                "time": round(last_time + (step * offset), 4),
+                "weights": zero_weights(),
+            }
+        )
     return tail
 
 
@@ -263,15 +292,14 @@ def _simplify_track(track, start_frame):
 
         deviation = _linear_deviation(previous_kept, current, next_point)
         is_turning_point = (
-            ((current["value"] - previous_kept["value"]) * (next_point["value"] - current["value"])) <= 0.0
-            and (
-                abs(current["value"] - previous_kept["value"]) >= epsilon
-                or abs(next_point["value"] - current["value"]) >= epsilon
-            )
+            (current["value"] - previous_kept["value"])
+            * (next_point["value"] - current["value"])
+        ) <= 0.0 and (
+            abs(current["value"] - previous_kept["value"]) >= epsilon
+            or abs(next_point["value"] - current["value"]) >= epsilon
         )
-        crosses_silence = (
-            (previous_kept["value"] <= epsilon < current["value"])
-            or (current["value"] <= epsilon < previous_kept["value"])
+        crosses_silence = (previous_kept["value"] <= epsilon < current["value"]) or (
+            current["value"] <= epsilon < previous_kept["value"]
         )
         exceeds_gap = (current["frame"] - previous_kept["frame"]) >= max_gap
 
@@ -289,11 +317,13 @@ def _inject_boundaries(track, start_frame):
         points.insert(0, {"frame": start, "value": 0.0, "frame_type": "sample"})
 
     if points[-1]["value"] != 0.0:
-        points.append({
-            "frame": round(points[-1]["frame"] + 1.0, 3),
-            "value": 0.0,
-            "frame_type": "sample",
-        })
+        points.append(
+            {
+                "frame": round(points[-1]["frame"] + 1.0, 3),
+                "value": 0.0,
+                "frame_type": "sample",
+            }
+        )
     return points
 
 
@@ -317,4 +347,3 @@ def _linear_deviation(previous_point, current_point, next_point):
         (next_point["value"] - previous_point["value"]) * ratio
     )
     return abs(current_point["value"] - expected_value)
-

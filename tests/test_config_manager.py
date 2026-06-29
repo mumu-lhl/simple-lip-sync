@@ -116,7 +116,8 @@ class ConfigManagerTests(unittest.TestCase):
             addon_dir = os.path.abspath("simple_lip_sync")
             manager = ConfigManager(addon_dir, temp_dir)
             entry = next(
-                item for item in manager.get_config_entries()
+                item
+                for item in manager.get_config_entries()
                 if item["type"] == CONFIG_SOURCE_PREDEFINED
             )
 
@@ -129,7 +130,9 @@ class ConfigManagerTests(unittest.TestCase):
             manager = ConfigManager(
                 addon_dir,
                 temp_dir,
-                translate_func=lambda text: {"Built-in": "内置", "User": "用户"}.get(text, text),
+                translate_func=lambda text: {"Built-in": "内置", "User": "用户"}.get(
+                    text, text
+                ),
             )
 
             entries = manager.get_config_entries()

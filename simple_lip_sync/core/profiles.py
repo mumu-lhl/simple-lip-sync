@@ -35,4 +35,3 @@ def get_lip_sync_preset_values(preset_name):
     if preset_name not in LIP_SYNC_PRESETS:
         preset_name = DEFAULT_LIP_SYNC_PRESET
     return dict(LIP_SYNC_PRESETS[preset_name])
-

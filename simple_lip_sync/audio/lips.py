@@ -24,7 +24,9 @@ class Lips:
     ):
         """Generate sparse viseme keyframes from an input audio file."""
         wav_path_16, is_temp = convert_to_wav_16000(
-            wav_path, seek_seconds=seek_seconds, duration_seconds=duration_seconds,
+            wav_path,
+            seek_seconds=seek_seconds,
+            duration_seconds=duration_seconds,
         )
         try:
             viseme_samples = analyze_wav(
@@ -44,4 +46,3 @@ class Lips:
             approach_speed=approach_speed,
             anticipation_scale=anticipation_scale,
         )
-

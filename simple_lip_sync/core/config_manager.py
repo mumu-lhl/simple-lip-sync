@@ -36,14 +36,16 @@ class ConfigManager:
                 config_data = self._load_config_from_path(config_path)
                 if config_data is None:
                     continue
-                entries.append({
-                    "id": self._build_config_id(source, file_name),
-                    "name": file_name,
-                    "path": config_path,
-                    "type": source,
-                    "display_name": self._build_display_name(config_data, source),
-                    "description": self._build_description(config_data, source),
-                })
+                entries.append(
+                    {
+                        "id": self._build_config_id(source, file_name),
+                        "name": file_name,
+                        "path": config_path,
+                        "type": source,
+                        "display_name": self._build_display_name(config_data, source),
+                        "description": self._build_description(config_data, source),
+                    }
+                )
         return entries
 
     def resolve_config_entry(self, selection):
@@ -81,7 +83,9 @@ class ConfigManager:
         config_path = os.path.join(self.user_config_path, config_name)
         with open(config_path, "w", encoding="utf-8") as file:
             json.dump(normalized_config, file, indent=2, ensure_ascii=False)
-        return self.resolve_config_entry(self._build_config_id(CONFIG_SOURCE_USER, config_name))
+        return self.resolve_config_entry(
+            self._build_config_id(CONFIG_SOURCE_USER, config_name)
+        )
 
     def save_config_from_display_name(self, display_name, config_data):
         """Save a preset using a user-facing preset name."""
@@ -108,7 +112,9 @@ class ConfigManager:
         target_path = os.path.join(self.user_config_path, target_name)
         with open(target_path, "w", encoding="utf-8") as file:
             json.dump(normalized_config, file, indent=2, ensure_ascii=False)
-        return self.resolve_config_entry(self._build_config_id(CONFIG_SOURCE_USER, target_name))
+        return self.resolve_config_entry(
+            self._build_config_id(CONFIG_SOURCE_USER, target_name)
+        )
 
     def export_config(self, selection, target_path):
         """Export a selected preset to a JSON file path."""
@@ -165,9 +171,14 @@ class ConfigManager:
             if entry["type"] != CONFIG_SOURCE_USER:
                 continue
             config = self._load_config_from_path(entry["path"])
-            if config and self._normalize_preset_name(config["name"]) == normalized_name:
+            if (
+                config
+                and self._normalize_preset_name(config["name"]) == normalized_name
+            ):
                 raise ValueError(
-                    self._translate("A user preset named '{name}' already exists").format(
+                    self._translate(
+                        "A user preset named '{name}' already exists"
+                    ).format(
                         name=preset_name,
                     )
                 )
@@ -202,7 +213,9 @@ class ConfigManager:
 
     def _ensure_user_config_root(self, user_scripts_dir):
         if user_scripts_dir is None:
-            user_scripts_dir = os.path.join(os.path.expanduser("~"), ".config", "blender")
+            user_scripts_dir = os.path.join(
+                os.path.expanduser("~"), ".config", "blender"
+            )
         user_config_dir = os.path.join(
             user_scripts_dir,
             "presets",

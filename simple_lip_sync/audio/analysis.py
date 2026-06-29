@@ -38,7 +38,9 @@ def analyze_samples(samples, sample_rate, db_threshold=-50.0, rms_threshold=0.01
     return analyze_samples_python(samples, sample_rate, db_threshold, rms_threshold)
 
 
-def analyze_samples_python(samples, sample_rate, db_threshold=-50.0, rms_threshold=0.01):
+def analyze_samples_python(
+    samples, sample_rate, db_threshold=-50.0, rms_threshold=0.01
+):
     """Return timestamped viseme samples with the pure Python analyzer."""
     frame_length = max(512, int(sample_rate * 0.064))
     hop_length = max(80, int(sample_rate * 0.010))
@@ -46,17 +48,14 @@ def analyze_samples_python(samples, sample_rate, db_threshold=-50.0, rms_thresho
         samples = samples + [0.0] * (frame_length - len(samples))
 
     window = _hann_window(frame_length)
-    formant_frequencies = sorted({
-        prototype["f1"]
-        for prototype in FORMANT_PROTOTYPES.values()
-    } | {
-        prototype["f2"]
-        for prototype in FORMANT_PROTOTYPES.values()
-    })
+    formant_frequencies = sorted(
+        {prototype["f1"] for prototype in FORMANT_PROTOTYPES.values()}
+        | {prototype["f2"] for prototype in FORMANT_PROTOTYPES.values()}
+    )
 
     results = []
     for start in range(0, len(samples) - frame_length + 1, hop_length):
-        frame = samples[start:start + frame_length]
+        frame = samples[start : start + frame_length]
         windowed = [frame[index] * window[index] for index in range(frame_length)]
         frame_rms = math.sqrt(sum(value * value for value in windowed) / frame_length)
         frame_db = 20 * math.log10(frame_rms + 1e-10)
@@ -71,11 +70,13 @@ def analyze_samples_python(samples, sample_rate, db_threshold=-50.0, rms_thresho
             }
             weights = score_visemes_from_formant_energy(energy)
 
-        results.append({
-            "time": timestamp,
-            "openness": round(openness, 4),
-            "weights": weights,
-        })
+        results.append(
+            {
+                "time": timestamp,
+                "openness": round(openness, 4),
+                "weights": weights,
+            }
+        )
     return results
 
 
@@ -92,7 +93,7 @@ def load_wav_samples(audio_path):
     if channels > 1:
         mono = []
         for index in range(0, len(values), channels):
-            frame = values[index:index + channels]
+            frame = values[index : index + channels]
             mono.append(sum(frame) / len(frame))
         values = mono
     return values, sample_rate
@@ -121,7 +122,7 @@ def _decode_pcm(raw, sample_width):
     if sample_width == 3:
         values = []
         for index in range(0, len(raw), 3):
-            chunk = raw[index:index + 3]
+            chunk = raw[index : index + 3]
             if len(chunk) < 3:
                 break
             sign = b"\xff" if chunk[2] & 0x80 else b"\x00"
@@ -161,5 +162,9 @@ def _goertzel_power(samples, sample_rate, frequency):
         current = sample + (coefficient * previous) - previous2
         previous2 = previous
         previous = current
-    power = (previous2 * previous2) + (previous * previous) - (coefficient * previous * previous2)
+    power = (
+        (previous2 * previous2)
+        + (previous * previous)
+        - (coefficient * previous * previous2)
+    )
     return max(0.0, power / max(1, len(samples)))

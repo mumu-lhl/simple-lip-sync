@@ -36,14 +36,17 @@ def main() -> None:
         if args.native_library:
             if not args.native_arcname:
                 raise ValueError("--native-arcname is required with --native-library")
-            _write_native_library(archive, Path(args.native_library), args.native_arcname)
+            _write_native_library(
+                archive, Path(args.native_library), args.native_arcname
+            )
 
 
 def _write_addon_files(archive: zipfile.ZipFile) -> None:
     for current_root, dirs, files in os.walk(ROOT):
         current_path = Path(current_root)
         dirs[:] = [
-            name for name in dirs
+            name
+            for name in dirs
             if name not in EXCLUDED_DIRS
             and (current_path / name) != ROOT / "audio" / "lib"
             and (current_path / name) != ROOT / "audio" / "native"

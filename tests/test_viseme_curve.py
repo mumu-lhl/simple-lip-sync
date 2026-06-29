@@ -39,7 +39,9 @@ class VisemeCurveTests(unittest.TestCase):
             {"time": 0.12, "openness": 0.0, "weights": _weights()},
         ]
 
-        keyframes = build_viseme_keyframes(samples, start_frame=1, fps=24, max_morph_value=1.0)
+        keyframes = build_viseme_keyframes(
+            samples, start_frame=1, fps=24, max_morph_value=1.0
+        )
         a_values = [point for point in keyframes["a"] if point["value"] > 0.0]
         i_values = [point for point in keyframes["i"] if point["value"] > 0.0]
 
@@ -52,4 +54,3 @@ class VisemeCurveTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

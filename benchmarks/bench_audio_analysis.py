@@ -52,14 +52,15 @@ SAMPLE_RATE = 44100  # Hz – matches typical audio files
 
 # (name, duration_seconds, human-readable description)
 SCENARIOS: list[tuple[str, float, str]] = [
-    ("short",  0.5,  "0.5 s  (~22 050 samples)"),
-    ("medium", 5.0,  "5.0 s  (~220 500 samples)"),
-    ("long",   30.0, "30.0 s (~1 323 000 samples)"),
+    ("short", 0.5, "0.5 s  (~22 050 samples)"),
+    ("medium", 5.0, "5.0 s  (~220 500 samples)"),
+    ("long", 30.0, "30.0 s (~1 323 000 samples)"),
 ]
 
 # ---------------------------------------------------------------------------
 # Synthetic audio generator
 # ---------------------------------------------------------------------------
+
 
 def _make_samples(duration: float, sample_rate: int = SAMPLE_RATE) -> list[float]:
     """Return a synthetic mono signal (multi-frequency sine mixture).
@@ -76,9 +77,9 @@ def _make_samples(duration: float, sample_rate: int = SAMPLE_RATE) -> list[float
     for i in range(n):
         t = i / sample_rate
         v = (
-            0.35 * math.sin(two_pi * 850.0  * t)
+            0.35 * math.sin(two_pi * 850.0 * t)
             + 0.25 * math.sin(two_pi * 1450.0 * t)
-            + 0.15 * math.sin(two_pi * 320.0  * t)
+            + 0.15 * math.sin(two_pi * 320.0 * t)
             + 0.10 * math.sin(two_pi * 2250.0 * t)
             # slow AM so RMS varies frame-to-frame
             + 0.05 * math.sin(two_pi * 3.5 * t) * math.sin(two_pi * 850.0 * t)
@@ -86,9 +87,11 @@ def _make_samples(duration: float, sample_rate: int = SAMPLE_RATE) -> list[float
         out.append(max(-1.0, min(1.0, v)))
     return out
 
+
 # ---------------------------------------------------------------------------
 # Timing helpers
 # ---------------------------------------------------------------------------
+
 
 class BenchmarkResult:
     """Holds raw timing data and computed statistics for one backend run."""
@@ -167,16 +170,17 @@ def run_benchmark(
         output_frames=output_frames,
     )
 
+
 # ---------------------------------------------------------------------------
 # Terminal formatting
 # ---------------------------------------------------------------------------
 
-_RST    = "\033[0m"
-_BOLD   = "\033[1m"
-_GREEN  = "\033[32m"
+_RST = "\033[0m"
+_BOLD = "\033[1m"
+_GREEN = "\033[32m"
 _YELLOW = "\033[33m"
-_CYAN   = "\033[36m"
-_RED    = "\033[31m"
+_CYAN = "\033[36m"
+_RED = "\033[31m"
 
 
 def _c(text: str, code: str) -> str:
@@ -241,7 +245,9 @@ def _print_scenario(
         _row(nat, highlight=rust_faster)
         speedup_str = _c(f"{speedup:.1f}×", _GREEN if rust_faster else _RED)
         winner = _c("Rust native", _GREEN) if rust_faster else _c("Python", _YELLOW)
-        print(f"\n  Speedup (Python ÷ Rust, mean): {speedup_str}  → {winner} is faster\n")
+        print(
+            f"\n  Speedup (Python ÷ Rust, mean): {speedup_str}  → {winner} is faster\n"
+        )
     else:
         _row(py)
         print()
@@ -259,37 +265,50 @@ def _print_summary(pairs: list[tuple[BenchmarkResult, BenchmarkResult | None]]) 
         print(f"  {py.scenario:<10} {_fmt(py.mean)} {nat_str} {spd_str:>10}")
     print()
 
+
 # ---------------------------------------------------------------------------
 # CSV output
 # ---------------------------------------------------------------------------
 
+
 def _write_csv(path: str, results: list[BenchmarkResult]) -> None:
     fields = [
-        "scenario", "backend", "audio_duration_s", "repeat",
-        "best_s", "mean_s", "worst_s", "stddev_s",
-        "throughput_x_realtime", "output_frames",
+        "scenario",
+        "backend",
+        "audio_duration_s",
+        "repeat",
+        "best_s",
+        "mean_s",
+        "worst_s",
+        "stddev_s",
+        "throughput_x_realtime",
+        "output_frames",
     ]
     with open(path, "w", newline="") as fh:
         writer = csv.DictWriter(fh, fieldnames=fields)
         writer.writeheader()
         for r in results:
-            writer.writerow({
-                "scenario":             r.scenario,
-                "backend":              r.backend,
-                "audio_duration_s":     r.duration_s,
-                "repeat":               r.repeat,
-                "best_s":               f"{r.best:.6f}",
-                "mean_s":               f"{r.mean:.6f}",
-                "worst_s":              f"{r.worst:.6f}",
-                "stddev_s":             f"{r.stddev:.6f}",
-                "throughput_x_realtime": f"{r.throughput_xrt():.2f}",
-                "output_frames":        r.output_frames,
-            })
+            writer.writerow(
+                {
+                    "scenario": r.scenario,
+                    "backend": r.backend,
+                    "audio_duration_s": r.duration_s,
+                    "repeat": r.repeat,
+                    "best_s": f"{r.best:.6f}",
+                    "mean_s": f"{r.mean:.6f}",
+                    "worst_s": f"{r.worst:.6f}",
+                    "stddev_s": f"{r.stddev:.6f}",
+                    "throughput_x_realtime": f"{r.throughput_xrt():.2f}",
+                    "output_frames": r.output_frames,
+                }
+            )
     print(f"  CSV written to: {path}\n")
+
 
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
+
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
@@ -298,20 +317,28 @@ def main(argv: list[str] | None = None) -> None:
         epilog=__doc__,
     )
     parser.add_argument(
-        "--repeat", type=int, default=5, metavar="N",
+        "--repeat",
+        type=int,
+        default=5,
+        metavar="N",
         help="Timed repetitions per scenario (default: 5)",
     )
     parser.add_argument(
-        "--scenario", default="all",
+        "--scenario",
+        default="all",
         choices=["short", "medium", "long", "all"],
         help="Scenario to run (default: all)",
     )
     parser.add_argument(
-        "--no-warmup", dest="no_warmup", action="store_true",
+        "--no-warmup",
+        dest="no_warmup",
+        action="store_true",
         help="Skip the warmup iteration",
     )
     parser.add_argument(
-        "--csv", metavar="FILE", default=None,
+        "--csv",
+        metavar="FILE",
+        default=None,
         help="Write results to this CSV file",
     )
     args = parser.parse_args(argv)
@@ -324,9 +351,19 @@ def main(argv: list[str] | None = None) -> None:
     if native_ok:
         print(_c("  ✓ Native (Rust) backend loaded successfully.", _GREEN))
     else:
-        print(_c("  ✗ Native backend not available — only Python will be benchmarked.", _YELLOW))
+        print(
+            _c(
+                "  ✗ Native backend not available — only Python will be benchmarked.",
+                _YELLOW,
+            )
+        )
         print(_c("    Build it with:  just native-audio", _YELLOW))
-        print(_c("    (or: cargo build --release --manifest-path native/simple_lip_sync_audio/Cargo.toml)", _YELLOW))
+        print(
+            _c(
+                "    (or: cargo build --release --manifest-path native/simple_lip_sync_audio/Cargo.toml)",
+                _YELLOW,
+            )
+        )
     print()
 
     active = [s for s in SCENARIOS if args.scenario in ("all", s[0])]

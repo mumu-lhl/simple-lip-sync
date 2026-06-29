@@ -69,7 +69,9 @@ def validate_lip_sync_config(config_data):
     }
 
     if "author" in config_data:
-        normalized["author"] = _require_non_empty_string(config_data.get("author"), "author")
+        normalized["author"] = _require_non_empty_string(
+            config_data.get("author"), "author"
+        )
 
     return normalized
 
@@ -94,7 +96,10 @@ def _validate_shape_keys(shape_keys):
             target_key,
             f"shape_keys.{normalized_key}",
         )
-        if normalized_key in normalized and normalized[normalized_key] != normalized_value:
+        if (
+            normalized_key in normalized
+            and normalized[normalized_key] != normalized_value
+        ):
             raise ConfigValidationError(
                 f"Duplicate canonical key in shape_keys: {normalized_key}"
             )
@@ -102,9 +107,7 @@ def _validate_shape_keys(shape_keys):
 
     missing = [key for key in CANONICAL_LIP_SYNC_KEYS if key not in normalized]
     if missing:
-        raise ConfigValidationError(
-            f"Missing shape key mappings: {', '.join(missing)}"
-        )
+        raise ConfigValidationError(f"Missing shape key mappings: {', '.join(missing)}")
     return normalized
 
 
@@ -169,4 +172,3 @@ def _normalize_lip_sync_key(value, field_name):
             f"Unsupported lip sync key '{value}' in field '{field_name}'"
         )
     return normalized
-
