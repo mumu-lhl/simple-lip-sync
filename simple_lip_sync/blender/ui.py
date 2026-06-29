@@ -269,6 +269,7 @@ class SIMPLE_LIP_SYNC_OT_generate(bpy.types.Operator):
     bl_idname = "simple_lip_sync.generate"
     bl_label = "Generate Lip Sync"
     bl_description = "Generate lip sync keyframes for selected meshes"
+    bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
         window = context.window
